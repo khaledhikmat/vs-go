@@ -5,13 +5,19 @@ import (
 	"log/slog"
 
 	"github.com/khaledhikmat/vs-go/model"
+	"github.com/khaledhikmat/vs-go/pipeline"
 	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/data"
 	"github.com/khaledhikmat/vs-go/service/lgr"
 	"github.com/khaledhikmat/vs-go/service/orphan"
 )
 
-type Processor func(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IService, orphanSvc orphan.IService) error
+type Processor func(canxCtx context.Context,
+	cfgSvc config.IService,
+	dataSvc data.IService,
+	orphanSvc orphan.IService,
+	streamers []pipeline.Streamer,
+	alerter pipeline.Alerter) error
 
 func procStats(datasvc data.IService, stats interface{}) {
 	switch stats := stats.(type) {

@@ -15,18 +15,13 @@ import (
 	"golang.org/x/xerrors"
 )
 
-const (
-	// Streamer names
-	SimpleDetectorStreamer = "SimpleDetectorStreamer"
-)
-
 type agent struct {
 	Camera model.Camera
 	CanxFn context.CancelFunc
 }
 
 // The agents manager is responsible for running the agents
-func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IService, orphanSvc orphan.IService) error {
+func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IService, orphanSvc orphan.IService, streamers []pipeline.Streamer, alerter pipeline.Alerter) error {
 	// Subscribe to the orphan service to receive orphaned cameras
 	orphanStream, err := orphanSvc.Subscribe()
 	if err != nil {
@@ -44,12 +39,11 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 	// Create an alerter stream using a simple alerter
 	// Alerter functions must comply with Alerter signature (check pipeline/type.go)
 	// So you can use any other alerter but the base library provides a simple one
-	alertStream := pipeline.SimpleAlerter(canxCtx, cfgSvc, errorStream, statsStream)
+	alertStream := alerter(canxCtx, cfgSvc, errorStream, statsStream)
 
 	// Register one or more streamers (but you can use any other streamer)
 	// Streamer functions must comply with Streamer signature (check pipeline/type.go)
 	// So you can use any other streamer. Please see sample streamers in pipeline/streamers.go.
-	pipeline.RegisterStreamer(SimpleDetectorStreamer, pipeline.SimpleDetector)
 
 	// Store running agents and manager stats in memory (convert to OTEL)
 	var agentsManagerStartTime = time.Now().Unix()
@@ -88,10 +82,7 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 				var agentStartErr error
 
 				go func() {
-					agentStartErr = pipeline.Agent(agentCanxCtx, cfgSvc, dataSvc, errorStream, statsStream, alertStream, camera, []string{
-						SimpleDetectorStreamer,
-						// Add more streamers here
-					})
+					agentStartErr = pipeline.Agent(agentCanxCtx, cfgSvc, dataSvc, errorStream, statsStream, alertStream, camera, streamers)
 					if agentStartErr != nil {
 						procError(dataSvc, model.GenError("agents_manager",
 							agentStartErr,
