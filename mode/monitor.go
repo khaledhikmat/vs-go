@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/khaledhikmat/vs-go/model"
+	"github.com/khaledhikmat/vs-go/pipeline"
 	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/data"
 	"github.com/khaledhikmat/vs-go/service/lgr"
@@ -14,7 +15,7 @@ import (
 
 // The agents monitor is responsible for monitoring for orphaned cameras
 // and publishing orphaned cameras so they can be picked up by the agents manager
-func Monitor(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IService, orphanSvc orphan.IService) error {
+func Monitor(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IService, orphanSvc orphan.IService, _ []pipeline.Streamer, _ pipeline.Alerter) error {
 	// Create an error stream
 	errorStream := make(chan interface{})
 	defer close(errorStream)

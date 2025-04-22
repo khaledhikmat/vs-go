@@ -12,6 +12,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/khaledhikmat/vs-go/mode"
+	"github.com/khaledhikmat/vs-go/pipeline"
 	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/data"
 	"github.com/khaledhikmat/vs-go/service/lgr"
@@ -80,9 +81,16 @@ func main() {
 	modeProcResult := make(chan error)
 	defer close(modeProcResult)
 
+	// Decide on streamers
+	streamers := []pipeline.Streamer{
+		pipeline.SimpleDetector,
+	}
+
+	// Use the library simple alerter
+
 	// Start the mode processor
 	go func() {
-		modeProcResult <- modeProc(canxCtx, cfgSvc, dataSvc, orphanSvc)
+		modeProcResult <- modeProc(canxCtx, cfgSvc, dataSvc, orphanSvc, streamers, pipeline.SimpleAlerter)
 	}()
 
 	// Wait for cancellation, mode proc, stats or error

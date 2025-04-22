@@ -13,17 +13,6 @@ import (
 	"github.com/khaledhikmat/vs-go/service/lgr"
 )
 
-// Streamer processes
-var streamerProcs = map[string]Streamer{}
-
-func RegisterStreamer(name string, streamer Streamer) {
-	if _, ok := streamerProcs[name]; ok {
-		lgr.Logger.Warn("streamer already registered", slog.String("name", name))
-		return
-	}
-	streamerProcs[name] = streamer
-}
-
 func Agent(canxCtx context.Context,
 	cfgSvc config.IService,
 	dataSvc data.IService,
@@ -31,7 +20,7 @@ func Agent(canxCtx context.Context,
 	statsStream chan interface{},
 	alertStream chan AlertData,
 	camera model.Camera,
-	streamNames []string) error {
+	streamers []Streamer) error {
 	agentID := uuid.NewString()
 	lgr.Logger.Info(
 		"agent starting....",
@@ -39,7 +28,7 @@ func Agent(canxCtx context.Context,
 		slog.String("camera", camera.Name),
 		slog.String("frameType", camera.FramerType),
 		slog.String("rtsp", camera.RtspURL),
-		slog.String("streamers", fmt.Sprintf("%v", streamNames)),
+		slog.Int("streamers", len(streamers)),
 	)
 
 	// OTEL stats
@@ -58,11 +47,7 @@ func Agent(canxCtx context.Context,
 
 	// Setup the stream channels
 	streamChannels := []chan FrameData{}
-	for _, name := range streamNames {
-		streamer, ok := streamerProcs[name]
-		if !ok {
-			return fmt.Errorf("streamer %s not found", name)
-		}
+	for _, streamer := range streamers {
 		streamChannels = append(streamChannels, streamer(canxCtx, cfgSvc, camera, errorStream, statsStream, alertStream))
 	}
 
