@@ -83,7 +83,7 @@ func procStreamerStats(datasvc data.IService, stats model.StreamerStats) {
 
 func procError(datasvc data.IService, err interface{}) {
 	errTemp := datasvc.NewError(err)
-	if err != nil {
+	if errTemp != nil {
 		lgr.Logger.Error(
 			"failed to store error",
 			slog.Any("error", errTemp),

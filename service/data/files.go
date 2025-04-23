@@ -186,6 +186,7 @@ func (svc *filesDBService) NewError(err interface{}) error {
 		customErr = custom
 	} else {
 		customErr.Processor = "N/A"
+		customErr.Inner = err.(error)
 		customErr.Message = err.(error).Error()
 		customErr.StackTrace = "N/A"
 		customErr.Misc = nil
@@ -195,12 +196,14 @@ func (svc *filesDBService) NewError(err interface{}) error {
 	errorData := struct {
 		Timestamp  int64                  `json:"timestamp"`
 		Processor  string                 `json:"processor"`
+		Inner      string                 `json:"innerError"`
 		Message    string                 `json:"message"`
 		StackTrace string                 `json:"stackTrace"`
 		Misc       map[string]interface{} `json:"misc"`
 	}{
 		Timestamp:  time.Now().Unix(),
 		Processor:  customErr.Processor,
+		Inner:      customErr.Inner.Error(),
 		Message:    customErr.Message,
 		StackTrace: customErr.StackTrace,
 		Misc:       customErr.Misc,

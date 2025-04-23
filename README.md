@@ -50,6 +50,10 @@ In the meantime, please note the following:
 - The main focus of the `agents-manager` and `agents-monitor` is to provide an automatic failover and self-healing in case of agents failures. A production system must also provide a way to auto-scale `agents-manager` pods when the queued orphaned requests are not being processed (a condition where all `agents-managers` are fully occupied with max agents).       
 - Agents can be stopped if the corresponding camera configuration (in the database) changes to excluded. The `agents-manager` detects this condition and stops the associated agent. This frees a slot in the agents pod. Therefore the `agents-manager` re-subscribes to the orphan service.  
 
+## Sample main.go
+
+This library provides a sample `main.go` file that can be used to bootstrap the video surveillance system. 
+
 ## Go Module
 
 ```bash
