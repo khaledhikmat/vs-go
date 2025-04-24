@@ -72,3 +72,19 @@ go get -u github.com/joho/godotenv
 go run main.go
 ```
 
+## Merge and Tag
+
+- Assuming we have a working branch i.e. `my-branch`
+  - `git add --all`
+  - `git commit -am "Major stuff..."`
+  - `git push`
+  - `git checkout main`
+  - `git merge my-branch`
+  - `git tag -a v1.0.0 -m "my great work"`
+  - `git tag` to make sure is is created.
+  - `git push --tags` to push tags to Github.
+
+## Issues
+
+- Create a make file
+
