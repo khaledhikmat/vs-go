@@ -66,9 +66,33 @@ go get -u github.com/joho/godotenv
 
 `OpenCV` must be installed on dev machine and in Docker on deployment. Please follow instructions [here](https://github.com/hybridgroup/gocv?tab=readme-ov-file#how-to-install).
 
+We provide a sample [installation script](install_opencv_ffmpeg.sh) that can be used for automatic installation. 
+
 ## Run Locally
+
+*Make sure that the `./settings` folder contains `cameras.json` file.*
 
 ```bash
 go run main.go
 ```
+
+## Docker
+
+We provide two sample Dockerfiles: one uses the OpenCV base image (i.e. `Dockerfile_auto`) and the other uses Ubuntu base image. You can expriment with each to see which ine fits better. 
+
+## Merge and Tag
+
+- Assuming we have a working branch i.e. `my-branch`
+  - `git add --all`
+  - `git commit -am "Major stuff..."`
+  - `git push`
+  - `git checkout main`
+  - `git merge my-branch`
+  - `git tag -a v1.0.0 -m "my great work"`
+  - `git tag` to make sure is is created.
+  - `git push --tags` to push tags to Github.
+
+## Issues
+
+- Create a make file
 

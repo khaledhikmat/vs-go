@@ -41,7 +41,7 @@ func SimpleAlerter(canx context.Context, cfgSvc config.IService, _ chan interfac
 				// Retrieve the video clip from VMS
 				// Upload the alerted clip to a cloud storage
 				// Send to a webhook
-				lgr.Logger.Debug(
+				lgr.Logger.Info(
 					"alert detected",
 					slog.String("camera", alert.Camera.Name),
 					slog.String("label", alert.Label),
@@ -57,7 +57,7 @@ func SimpleAlerter(canx context.Context, cfgSvc config.IService, _ chan interfac
 					"confidence":    alert.Confidence,
 					"timestamp":     time.Now().Format(time.RFC3339),
 				}
-				lgr.Logger.Debug(
+				lgr.Logger.Info(
 					"alert payload",
 					slog.Any("payload", payload),
 				)
