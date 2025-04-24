@@ -18,7 +18,7 @@ func (svc *hardcodedService) GetModeMaxShutdownTime() int {
 func (svc *hardcodedService) GetInputFolder() string {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return "../settings"
+	return "./settings"
 }
 
 func (svc *hardcodedService) GetCamerasInputFile() string {
@@ -30,7 +30,7 @@ func (svc *hardcodedService) GetCamerasInputFile() string {
 func (svc *hardcodedService) GetRecordingsFolder() string {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return "../recordings"
+	return "./recordings"
 }
 
 func (svc *hardcodedService) GetMaxAgentsPerPod() int {

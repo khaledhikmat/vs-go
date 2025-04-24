@@ -46,7 +46,7 @@ func SimpleDetector(canx context.Context, cfgSvc config.IService, camera model.C
 					Mat:        frame.Mat.Clone(),
 					Camera:     camera,
 					Timestamp:  time.Now(),
-					Label:      "fake",
+					Label:      "simple",
 					Confidence: 100.0,
 				}
 			}
