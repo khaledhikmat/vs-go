@@ -1,0 +1,14 @@
+
+version: '3.8'
+
+services:
+  gocv-rtsp-app:
+    build: .
+    container_name: gocv_rtsp_runner
+    network_mode: host  # Required for RTSP camera access on LAN
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    volumes:
+      - ./settings:/app/settings
+      - ./recordings:/app/settings
