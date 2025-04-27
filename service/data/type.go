@@ -16,4 +16,5 @@ type IService interface {
 	NewAgentStats(stats model.AgentStats) error
 	NewFramerStats(stats model.FramerStats) error
 	NewStreamerStats(stats model.StreamerStats) error
+	NewAlerterStats(stats model.AlerterStats) error
 }

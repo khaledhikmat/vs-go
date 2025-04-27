@@ -8,14 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/khaledhikmat/vs-go/model"
-	"github.com/khaledhikmat/vs-go/service/config"
-	"github.com/khaledhikmat/vs-go/service/data"
 	"github.com/khaledhikmat/vs-go/service/lgr"
 )
 
 func Agent(canxCtx context.Context,
-	cfgSvc config.IService,
-	dataSvc data.IService,
+	svcs ServicesFactory,
 	errorStream chan interface{},
 	statsStream chan interface{},
 	alertStream chan AlertData,
@@ -40,7 +37,7 @@ func Agent(canxCtx context.Context,
 	}
 
 	// Update the camera agent id
-	err := dataSvc.UpdateCameraAgentID(camera.ID, agentID)
+	err := svcs.DataSvc.UpdateCameraAgentID(camera.ID, agentID)
 	if err != nil {
 		return fmt.Errorf("error updating camera agent id: %w", err)
 	}
@@ -48,11 +45,11 @@ func Agent(canxCtx context.Context,
 	// Setup the stream channels
 	streamChannels := []chan FrameData{}
 	for _, streamer := range streamers {
-		streamChannels = append(streamChannels, streamer(canxCtx, cfgSvc, camera, errorStream, statsStream, alertStream))
+		streamChannels = append(streamChannels, streamer(canxCtx, svcs, camera, errorStream, statsStream, alertStream))
 	}
 
 	// Start the agent frame capturer
-	framer(canxCtx, cfgSvc, camera, errorStream, statsStream, streamChannels)
+	framer(canxCtx, svcs, camera, errorStream, statsStream, streamChannels)
 
 	// Monitor cancellations and update heartbeats
 	for {
@@ -63,10 +60,10 @@ func Agent(canxCtx context.Context,
 			)
 			return nil
 
-		case <-time.After(time.Duration(time.Duration(cfgSvc.GetAgentsManagerPeriodicTimeout()) * time.Second)):
+		case <-time.After(time.Duration(time.Duration(svcs.CfgSvc.GetAgentsManagerPeriodicTimeout()) * time.Second)):
 			// Update the agent heartbeat so that the agents monitor would know
 			// that the agent is alive and kicking and does need to be re-scheduled
-			err := dataSvc.UpdateCameraAgentHeartbeat(camera.ID)
+			err := svcs.DataSvc.UpdateCameraAgentHeartbeat(camera.ID)
 			if err != nil {
 				lgr.Logger.Error(
 					"error updating camera agent heartbeat",

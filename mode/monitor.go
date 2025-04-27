@@ -7,15 +7,12 @@ import (
 
 	"github.com/khaledhikmat/vs-go/model"
 	"github.com/khaledhikmat/vs-go/pipeline"
-	"github.com/khaledhikmat/vs-go/service/config"
-	"github.com/khaledhikmat/vs-go/service/data"
 	"github.com/khaledhikmat/vs-go/service/lgr"
-	"github.com/khaledhikmat/vs-go/service/orphan"
 )
 
 // The agents monitor is responsible for monitoring for orphaned cameras
 // and publishing orphaned cameras so they can be picked up by the agents manager
-func Monitor(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IService, orphanSvc orphan.IService, _ []pipeline.Streamer, _ pipeline.Alerter) error {
+func Monitor(canxCtx context.Context, svcs pipeline.ServicesFactory, _ []pipeline.Streamer, _ pipeline.Alerter) error {
 	// Create an error stream
 	errorStream := make(chan interface{})
 	defer close(errorStream)
@@ -29,9 +26,9 @@ func Monitor(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 			)
 			goto resume
 
-		case <-time.After(time.Duration(time.Duration(cfgSvc.GetAgentsMonitorPeriodicTimeout()) * time.Second)):
+		case <-time.After(time.Duration(time.Duration(svcs.CfgSvc.GetAgentsMonitorPeriodicTimeout()) * time.Second)):
 			// Retrieve orphaned cameras
-			cameras, err := dataSvc.RetrieveOrphanedCameras(10)
+			cameras, err := svcs.DataSvc.RetrieveOrphanedCameras(10)
 			if err != nil {
 				errorStream <- model.GenError("agents_monitor",
 					err,
@@ -41,7 +38,7 @@ func Monitor(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 			}
 
 			// Publish orphaned cameras through the orphan service
-			err = orphanSvc.Publish(cameras)
+			err = svcs.OrphanSvc.Publish(cameras)
 			if err != nil {
 				errorStream <- model.GenError("agents_monitor",
 					err,
@@ -51,7 +48,7 @@ func Monitor(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 			}
 
 		case e := <-errorStream:
-			procError(dataSvc, e)
+			procError(svcs.DataSvc, e)
 		}
 	}
 
@@ -64,7 +61,7 @@ resume:
 
 	// The only way to exit the main function is to wait for the shutdown
 	// duration
-	timer := time.NewTimer(time.Duration(cfgSvc.GetModeMaxShutdownTime()) * time.Second)
+	timer := time.NewTimer(time.Duration(svcs.CfgSvc.GetModeMaxShutdownTime()) * time.Second)
 	defer timer.Stop()
 
 	for {
@@ -73,13 +70,13 @@ resume:
 			// Timer expired, proceed with shutdown
 			lgr.Logger.Info(
 				"agents monitor shutdown waiting period expired. Exiting now",
-				slog.Duration("period", time.Duration(cfgSvc.GetModeMaxShutdownTime())*time.Second),
+				slog.Duration("period", time.Duration(svcs.CfgSvc.GetModeMaxShutdownTime())*time.Second),
 			)
 
 			return nil
 
 		case e := <-errorStream:
-			procError(dataSvc, e)
+			procError(svcs.DataSvc, e)
 		}
 	}
 }

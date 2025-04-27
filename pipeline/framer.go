@@ -10,13 +10,13 @@ import (
 	"gocv.io/x/gocv"
 )
 
-func framer(canxCtx context.Context, cfgSvc config.IService, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
+func framer(canxCtx context.Context, svcs ServicesFactory, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
 	if camera.FramerType == "random" {
-		go randomFramer(canxCtx, cfgSvc, camera, errorStream, statsStream, streamChannels)
+		go randomFramer(canxCtx, svcs.CfgSvc, camera, errorStream, statsStream, streamChannels)
 		return
 	}
 
-	go rtspFramer(canxCtx, cfgSvc, camera, errorStream, statsStream, streamChannels)
+	go rtspFramer(canxCtx, svcs.CfgSvc, camera, errorStream, statsStream, streamChannels)
 }
 
 func rtspFramer(canxCtx context.Context, _ config.IService, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
