@@ -15,8 +15,12 @@ import (
 	"github.com/khaledhikmat/vs-go/pipeline"
 	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/data"
+	"github.com/khaledhikmat/vs-go/service/inference"
 	"github.com/khaledhikmat/vs-go/service/lgr"
 	"github.com/khaledhikmat/vs-go/service/orphan"
+	"github.com/khaledhikmat/vs-go/service/storage"
+	"github.com/khaledhikmat/vs-go/service/vms"
+	"github.com/khaledhikmat/vs-go/service/webhook"
 )
 
 const (
@@ -76,6 +80,24 @@ func main() {
 	dataSvc := data.NewFilesDB(cfgSvc)
 	// Orphan service
 	orphanSvc := orphan.NewTimed(canxCtx, cfgSvc, dataSvc)
+	// storage service
+	storageSvc := storage.NewFake(cfgSvc)
+	// vms service
+	vmsSvc := vms.NewFake(cfgSvc, storageSvc)
+	// inference service
+	inferenceSvc := inference.NewFake()
+	// webhook service
+	webhookSvc := webhook.NewFake(cfgSvc)
+
+	svcs := pipeline.ServicesFactory{
+		CfgSvc:       cfgSvc,
+		DataSvc:      dataSvc,
+		OrphanSvc:    orphanSvc,
+		StorageSvc:   storageSvc,
+		VmsSvc:       vmsSvc,
+		InferenceSvc: inferenceSvc,
+		WebhookSvc:   webhookSvc,
+	}
 
 	// Create mode processor result
 	modeProcResult := make(chan error)
@@ -84,13 +106,14 @@ func main() {
 	// Decide on streamers
 	streamers := []pipeline.Streamer{
 		pipeline.SimpleDetector,
+		//pipeline.MP4Recorder,
 	}
 
 	// Use the library simple alerter
 
 	// Start the mode processor
 	go func() {
-		modeProcResult <- modeProc(canxCtx, cfgSvc, dataSvc, orphanSvc, streamers, pipeline.SimpleAlerter)
+		modeProcResult <- modeProc(canxCtx, svcs, streamers, pipeline.SimpleAlerter)
 	}()
 
 	// Wait for cancellation, mode proc, stats or error

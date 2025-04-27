@@ -6,16 +6,12 @@ import (
 
 	"github.com/khaledhikmat/vs-go/model"
 	"github.com/khaledhikmat/vs-go/pipeline"
-	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/data"
 	"github.com/khaledhikmat/vs-go/service/lgr"
-	"github.com/khaledhikmat/vs-go/service/orphan"
 )
 
 type Processor func(canxCtx context.Context,
-	cfgSvc config.IService,
-	dataSvc data.IService,
-	orphanSvc orphan.IService,
+	svcs pipeline.ServicesFactory,
 	streamers []pipeline.Streamer,
 	alerter pipeline.Alerter) error
 
@@ -29,6 +25,8 @@ func procStats(datasvc data.IService, stats interface{}) {
 		procFramerStats(datasvc, stats)
 	case model.StreamerStats:
 		procStreamerStats(datasvc, stats)
+	case model.AlerterStats:
+		procAlerterStats(datasvc, stats)
 	default:
 		lgr.Logger.Error(
 			"unknown stats type",
@@ -72,6 +70,17 @@ func procFramerStats(datasvc data.IService, stats model.FramerStats) {
 
 func procStreamerStats(datasvc data.IService, stats model.StreamerStats) {
 	err := datasvc.NewStreamerStats(stats)
+	if err != nil {
+		lgr.Logger.Error(
+			"failed to store streamer stats",
+			slog.Any("stats", stats),
+			slog.Any("error", err),
+		)
+	}
+}
+
+func procAlerterStats(datasvc data.IService, stats model.AlerterStats) {
+	err := datasvc.NewAlerterStats(stats)
 	if err != nil {
 		lgr.Logger.Error(
 			"failed to store streamer stats",

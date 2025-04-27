@@ -8,11 +8,7 @@ import (
 
 	"github.com/khaledhikmat/vs-go/model"
 	"github.com/khaledhikmat/vs-go/pipeline"
-	"github.com/khaledhikmat/vs-go/service/config"
-	"github.com/khaledhikmat/vs-go/service/data"
 	"github.com/khaledhikmat/vs-go/service/lgr"
-	"github.com/khaledhikmat/vs-go/service/orphan"
-	"golang.org/x/xerrors"
 )
 
 type agent struct {
@@ -21,9 +17,9 @@ type agent struct {
 }
 
 // The agents manager is responsible for running the agents
-func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IService, orphanSvc orphan.IService, streamers []pipeline.Streamer, alerter pipeline.Alerter) error {
+func Manager(canxCtx context.Context, svcs pipeline.ServicesFactory, streamers []pipeline.Streamer, alerter pipeline.Alerter) error {
 	// Subscribe to the orphan service to receive orphaned cameras
-	orphanStream, err := orphanSvc.Subscribe()
+	orphanStream, err := svcs.OrphanSvc.Subscribe()
 	if err != nil {
 		return err
 	}
@@ -39,7 +35,7 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 	// Create an alerter stream using a simple alerter
 	// Alerter functions must comply with Alerter signature (check pipeline/type.go)
 	// So you can use any other alerter but the base library provides a simple one
-	alertStream := alerter(canxCtx, cfgSvc, errorStream, statsStream)
+	alertStream := alerter(canxCtx, svcs, errorStream, statsStream)
 
 	// Register one or more streamers (but you can use any other streamer)
 	// Streamer functions must comply with Streamer signature (check pipeline/type.go)
@@ -69,7 +65,7 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 
 			// Run each camera's agent using configured streamers
 			for _, camera := range orphanedCameras {
-				if len(runningAgents) >= cfgSvc.GetMaxAgentsPerPod() {
+				if len(runningAgents) >= svcs.CfgSvc.GetMaxAgentsPerPod() {
 					unAccomodatedCameras = append(unAccomodatedCameras, camera)
 					continue
 				}
@@ -82,9 +78,9 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 				var agentStartErr error
 
 				go func() {
-					agentStartErr = pipeline.Agent(agentCanxCtx, cfgSvc, dataSvc, errorStream, statsStream, alertStream, camera, streamers)
+					agentStartErr = pipeline.Agent(agentCanxCtx, svcs, errorStream, statsStream, alertStream, camera, streamers)
 					if agentStartErr != nil {
-						procError(dataSvc, model.GenError("agents_manager",
+						procError(svcs.DataSvc, model.GenError("agents_manager",
 							agentStartErr,
 							map[string]interface{}{},
 							"error starting agent for camera: %s",
@@ -111,26 +107,26 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 				lgr.Logger.Debug(
 					"agents pod could not accommodate these cameras.",
 					slog.Int("runningAgents", len(runningAgents)),
-					slog.Int("maxAgentsPerPod", cfgSvc.GetMaxAgentsPerPod()),
+					slog.Int("maxAgentsPerPod", svcs.CfgSvc.GetMaxAgentsPerPod()),
 					slog.Int("unAccomodatedAgents", len(unAccomodatedCameras)),
 				)
 			}
 
-			if len(runningAgents) >= cfgSvc.GetMaxAgentsPerPod() {
+			if len(runningAgents) >= svcs.CfgSvc.GetMaxAgentsPerPod() {
 				agentsManagerStats.TotalOrphanedRequestUnsubscriptions++
 				// Unsubscribe from the orphan service so that we don't get more cameras
 				// We want to make sure that we don't consume events that may deprive
 				// other agent pods from getting camera requests
-				err = orphanSvc.Unsubscribe()
+				err = svcs.OrphanSvc.Unsubscribe()
 				if err != nil {
-					lgr.Logger.Error(
-						"error unsubscribing from orphan service",
-						slog.Any("error", xerrors.New(err.Error())),
-					)
+					procError(svcs.DataSvc, model.GenError("agents_manager",
+						err,
+						map[string]interface{}{},
+						"error unsubscribing from orphan service"))
 				}
 			}
 
-		case <-time.After(time.Duration(time.Duration(cfgSvc.GetAgentsManagerPeriodicTimeout()) * time.Second)):
+		case <-time.After(time.Duration(time.Duration(svcs.CfgSvc.GetAgentsManagerPeriodicTimeout()) * time.Second)):
 			// Monitor my running agents to see if they need to be stopped (due to exclusion)
 			// Convert runningAgents to runningAgentIDs
 			runningAgentIDs := make([]string, 0, len(runningAgents))
@@ -139,12 +135,12 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 			}
 
 			// Retrieve cameras from the data service
-			cameras, err := dataSvc.RetrieveCamerasByIDs(runningAgentIDs)
+			cameras, err := svcs.DataSvc.RetrieveCamerasByIDs(runningAgentIDs)
 			if err != nil {
-				lgr.Logger.Error(
-					"error subscribing to orphan service",
-					slog.Any("error", xerrors.New(err.Error())),
-				)
+				procError(svcs.DataSvc, model.GenError("agents_manager",
+					err,
+					map[string]interface{}{},
+					"error retrieving cameras by IDs from the data service"))
 				continue
 			}
 
@@ -161,16 +157,16 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 				}
 			}
 
-			if len(runningAgents) < cfgSvc.GetMaxAgentsPerPod() {
+			if len(runningAgents) < svcs.CfgSvc.GetMaxAgentsPerPod() {
 				// If we have less than the max agents, we can re-subscribe to the orphan service
 				// Re-subscribe to the orphan service so that we can get more cameras
 				agentsManagerStats.TotalOrphanedRequestSubscriptions++
-				_, err = orphanSvc.Subscribe()
+				_, err = svcs.OrphanSvc.Subscribe()
 				if err != nil {
-					lgr.Logger.Error(
-						"error subscribing to orphan service",
-						slog.Any("error", xerrors.New(err.Error())),
-					)
+					procError(svcs.DataSvc, model.GenError("agents_manager",
+						err,
+						map[string]interface{}{},
+						"error subscribing to orphan service"))
 				}
 			}
 
@@ -184,13 +180,13 @@ func Manager(canxCtx context.Context, cfgSvc config.IService, dataSvc data.IServ
 			}
 
 			// Send the stats to OTEL
-			procStats(dataSvc, agentsManagerStats)
+			procStats(svcs.DataSvc, agentsManagerStats)
 
 		case s := <-statsStream:
-			procStats(dataSvc, s)
+			procStats(svcs.DataSvc, s)
 
 		case e := <-errorStream:
-			procError(dataSvc, e)
+			procError(svcs.DataSvc, e)
 		}
 	}
 
@@ -203,7 +199,7 @@ resume:
 
 	// The only way to exit the main function is to wait for the shutdown
 	// duration
-	timer := time.NewTimer(time.Duration(cfgSvc.GetModeMaxShutdownTime()) * time.Second)
+	timer := time.NewTimer(time.Duration(svcs.CfgSvc.GetModeMaxShutdownTime()) * time.Second)
 	defer timer.Stop()
 
 	for {
@@ -212,16 +208,16 @@ resume:
 			// Timer expired, proceed with shutdown
 			lgr.Logger.Info(
 				"agents manager shutdown waiting period expired. Exiting now",
-				slog.Duration("period", time.Duration(cfgSvc.GetModeMaxShutdownTime())*time.Second),
+				slog.Duration("period", time.Duration(svcs.CfgSvc.GetModeMaxShutdownTime())*time.Second),
 			)
 
 			return nil
 
 		case s := <-statsStream:
-			procStats(dataSvc, s)
+			procStats(svcs.DataSvc, s)
 
 		case e := <-errorStream:
-			procError(dataSvc, e)
+			procError(svcs.DataSvc, e)
 		}
 	}
 }

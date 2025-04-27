@@ -6,7 +6,7 @@ type IService interface {
 	GetCamerasInputFile() string
 	GetRecordingsFolder() string
 	GetMaxAgentsPerPod() int
-	GetAgentAlerterWebhookRetry() int
+	GetAgentAlerterPeriodicTimeout() int
 	GetAgentPeriodicTimeout() int
 	GetAgentsManagerPeriodicTimeout() int
 	GetAgentsMonitorPeriodicTimeout() int

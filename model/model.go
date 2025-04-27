@@ -38,7 +38,7 @@ type Camera struct {
 
 type AlerterStats struct {
 	Name      string `json:"name"`
-	Alerts    int    `json:"frames"`
+	Alerts    int    `json:"alerts"`
 	Errors    int    `json:"errors"`
 	Uptime    int64  `json:"uptime"`
 	Timestamp int64  `json:"timestamp"`

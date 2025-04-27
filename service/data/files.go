@@ -235,6 +235,12 @@ func (svc *filesDBService) NewStreamerStats(stats model.StreamerStats) error {
 	return newEntity(stats, "streamer-stats", svc.CfgSvc)
 }
 
+func (svc *filesDBService) NewAlerterStats(stats model.AlerterStats) error {
+	// Marshal the stats data to JSON
+	stats.Timestamp = time.Now().Unix()
+	return newEntity(stats, "alerter-stats", svc.CfgSvc)
+}
+
 func newEntity[T any](entity T, filename string, cfgsvc config.IService) error {
 	entities, err := retrieveEntites[T](filename, cfgsvc)
 	if err != nil {

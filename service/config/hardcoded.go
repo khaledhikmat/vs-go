@@ -39,10 +39,10 @@ func (svc *hardcodedService) GetMaxAgentsPerPod() int {
 	return 1
 }
 
-func (svc *hardcodedService) GetAgentAlerterWebhookRetry() int {
+func (svc *hardcodedService) GetAgentAlerterPeriodicTimeout() int {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return 3 * 60 // 3 minutes
+	return 5 * 60
 }
 
 func (svc *hardcodedService) GetAgentPeriodicTimeout() int {
