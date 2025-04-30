@@ -19,14 +19,14 @@ RUN curl -OL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz
 ENV PATH=$PATH:/usr/local/go/bin
 
-# Clone and install GoCV with CUDA
+# Clone and patch GoCV
 WORKDIR /opt
 RUN git clone https://github.com/hybridgroup/gocv.git
-# RUN sed -i 's/sudo //g' gocv/Makefile
-# Add before make install_cuda
-RUN sed -i 's/CMAKE_ARGS :=/CMAKE_ARGS := -D OPENCV_GENERATE_PKGCONFIG=ON /' gocv/Makefile
-
 WORKDIR /opt/gocv
+# Remove sudo and add OpenCV pkg-config generation flag
+RUN sed -i 's/sudo //g; s/CMAKE_ARGS :=/CMAKE_ARGS := -D OPENCV_GENERATE_PKGCONFIG=ON /' Makefile
+
+# Build and install GoCV with CUDA
 RUN make install_cuda
 
 # Prepare workspace and copy your Go code
