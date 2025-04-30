@@ -22,7 +22,10 @@ ENV PATH=$PATH:/usr/local/go/bin
 # Clone and install GoCV with CUDA
 WORKDIR /opt
 RUN git clone https://github.com/hybridgroup/gocv.git
-RUN sed -i 's/sudo //g' gocv/Makefile
+# RUN sed -i 's/sudo //g' gocv/Makefile
+# Add before make install_cuda
+RUN sed -i 's/CMAKE_ARGS :=/CMAKE_ARGS := -D OPENCV_GENERATE_PKGCONFIG=ON /' gocv/Makefile
+
 WORKDIR /opt/gocv
 RUN make install_cuda
 
