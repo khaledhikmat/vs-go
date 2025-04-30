@@ -24,9 +24,9 @@ WORKDIR /opt
 RUN git clone https://github.com/hybridgroup/gocv.git
 WORKDIR /opt/gocv
 
-# Patch Makefile: remove sudo, force cmake to generate opencv4.pc
+# Patch Makefile: remove sudo + append pkgconfig flag
 RUN sed -i 's/sudo //g' Makefile && \
-    sed -i 's|cmake ..|cmake -D OPENCV_GENERATE_PKGCONFIG=ON ..|' Makefile
+    sed -i '/^CMAKE_ARGS :=/ s|$| -D OPENCV_GENERATE_PKGCONFIG=ON|' Makefile
 
 # Set pkg-config search path
 ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
