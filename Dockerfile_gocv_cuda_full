@@ -23,8 +23,12 @@ ENV PATH=$PATH:/usr/local/go/bin
 WORKDIR /opt
 RUN git clone https://github.com/hybridgroup/gocv.git
 WORKDIR /opt/gocv
+
 # Remove sudo and add OpenCV pkg-config generation flag
 RUN sed -i 's/sudo //g; s/CMAKE_ARGS :=/CMAKE_ARGS := -D OPENCV_GENERATE_PKGCONFIG=ON /' Makefile
+
+# Ensure pkg-config can find opencv4.pc
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 
 # Build and install GoCV with CUDA
 RUN make install_cuda
