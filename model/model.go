@@ -57,13 +57,14 @@ type StreamerStats struct {
 }
 
 type FramerStats struct {
-	Name      string `json:"name"`
-	Camera    string `json:"camera"`
-	FPS       int    `json:"fps"`
-	Frames    int    `json:"frames"`
-	Errors    int    `json:"errors"`
-	Uptime    int64  `json:"uptime"`
-	Timestamp int64  `json:"timestamp"`
+	Name          string `json:"name"`
+	Camera        string `json:"camera"`
+	FPS           int    `json:"fps"`
+	Frames        int    `json:"frames"`
+	SkippedFrames int    `json:"skippedFrames"`
+	Errors        int    `json:"errors"`
+	Uptime        int64  `json:"uptime"`
+	Timestamp     int64  `json:"timestamp"`
 }
 
 type AgentStats struct {

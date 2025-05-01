@@ -5,21 +5,20 @@ import (
 	"time"
 
 	"github.com/khaledhikmat/vs-go/model"
-	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/lgr"
 	"gocv.io/x/gocv"
 )
 
 func framer(canxCtx context.Context, svcs ServicesFactory, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
 	if camera.FramerType == "random" {
-		go randomFramer(canxCtx, svcs.CfgSvc, camera, errorStream, statsStream, streamChannels)
+		go randomFramer(canxCtx, svcs, camera, errorStream, statsStream, streamChannels)
 		return
 	}
 
-	go rtspFramer(canxCtx, svcs.CfgSvc, camera, errorStream, statsStream, streamChannels)
+	go rtspFramer(canxCtx, svcs, camera, errorStream, statsStream, streamChannels)
 }
 
-func rtspFramer(canxCtx context.Context, _ config.IService, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
+func rtspFramer(canxCtx context.Context, svcs ServicesFactory, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
 	webcam, err := gocv.OpenVideoCapture(camera.RtspURL)
 	if err != nil {
 		errorStream <- model.GenError("agent_rtsp_framer",
@@ -33,6 +32,7 @@ func rtspFramer(canxCtx context.Context, _ config.IService, camera model.Camera,
 	var startTime = time.Now().Unix()
 	var endTime = time.Now().Unix()
 	var frames = 0
+	var skippedFrames = 0
 	var errors = 0
 
 	defer func() {
@@ -40,12 +40,13 @@ func rtspFramer(canxCtx context.Context, _ config.IService, camera model.Camera,
 		uptime := endTime - startTime
 		fps := int(float64(frames) / float64(uptime))
 		statsStream <- model.FramerStats{
-			Name:   "rtspFramer",
-			Camera: camera.Name,
-			Frames: frames,
-			Errors: errors,
-			Uptime: uptime,
-			FPS:    fps,
+			Name:          "rtspFramer",
+			Camera:        camera.Name,
+			Frames:        frames,
+			SkippedFrames: skippedFrames,
+			Errors:        errors,
+			Uptime:        uptime,
+			FPS:           fps,
 		}
 	}()
 
@@ -67,6 +68,12 @@ func rtspFramer(canxCtx context.Context, _ config.IService, camera model.Camera,
 			}
 
 			frames++
+			// Determine if we should skip the frame
+			if svcs.InferenceSvc.CanSkipFrame(frames) {
+				skippedFrames++
+				continue
+			}
+
 			for _, streamChan := range streamChannels {
 				// WARNING: We need an extra check to make sure we don't send on c closed channel
 				select {
@@ -83,10 +90,11 @@ func rtspFramer(canxCtx context.Context, _ config.IService, camera model.Camera,
 	}
 }
 
-func randomFramer(canxCtx context.Context, _ config.IService, camera model.Camera, _ chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
+func randomFramer(canxCtx context.Context, svcs ServicesFactory, camera model.Camera, _ chan interface{}, statsStream chan interface{}, streamChannels []chan FrameData) {
 	var startTime = time.Now().Unix()
 	var endTime = time.Now().Unix()
 	var frames = 0
+	var skippedFrames = 0
 	var errors = 0
 
 	defer func() {
@@ -94,12 +102,13 @@ func randomFramer(canxCtx context.Context, _ config.IService, camera model.Camer
 		uptime := endTime - startTime
 		fps := int(float64(frames) / float64(uptime))
 		statsStream <- model.FramerStats{
-			Name:   "randomFramer",
-			Camera: camera.Name,
-			Frames: frames,
-			Errors: errors,
-			Uptime: uptime,
-			FPS:    fps,
+			Name:          "randomFramer",
+			Camera:        camera.Name,
+			Frames:        frames,
+			SkippedFrames: skippedFrames,
+			Errors:        errors,
+			Uptime:        uptime,
+			FPS:           fps,
 		}
 	}()
 
@@ -113,6 +122,12 @@ func randomFramer(canxCtx context.Context, _ config.IService, camera model.Camer
 			return
 		default:
 			frames++
+			// Determine if we should skip the frame
+			if svcs.InferenceSvc.CanSkipFrame(frames) {
+				skippedFrames++
+				continue
+			}
+
 			// Generate a random frame
 			img := gocv.NewMatWithSize(480, 640, gocv.MatTypeCV8UC3) // Create a 480x640 image with 3 channels (BGR)
 			// Route the frame to multiple streamers
