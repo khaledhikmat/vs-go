@@ -125,19 +125,13 @@ func SimpleDetector(canx context.Context, svcs ServicesFactory, camera model.Cam
 	return in
 }
 
-var (
-	modelPath     = "yolov5s.onnx"
-	labelsPath    = "coco.names"
-	confThreshold = float32(0.5)
-)
-
 func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, alertStream chan AlertData) chan FrameData {
 	in := make(chan FrameData, 100)
 
 	go func() {
 		defer close(in)
 
-		net := gocv.ReadNet(modelPath, "")
+		net := gocv.ReadNet(svcs.CfgSvc.GetYolo5StreamerModelPath(), "")
 		err := net.SetPreferableBackend(gocv.NetBackendDefault)
 		if err != nil {
 			errorStream <- model.GenError("agent_yolo5_detector",
@@ -155,7 +149,7 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			return
 		}
 
-		labels := loadLabels(labelsPath)
+		labels := loadLabels(svcs.CfgSvc.GetYolo5CocoNamesPath())
 
 		flush := func() {
 			// TODO:
@@ -175,7 +169,7 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				row := output.RowRange(i, i+1)
 				data, _ := row.DataPtrFloat32()
 				confidence := data[4]
-				if confidence < confThreshold {
+				if confidence < svcs.CfgSvc.GetYolo5ConfidenceThreshold() {
 					continue
 				}
 
@@ -189,7 +183,7 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 					}
 				}
 
-				if maxScore > confThreshold {
+				if maxScore > svcs.CfgSvc.GetYolo5ConfidenceThreshold() {
 					cx, cy, w, h := data[0]*float32(frame.Mat.Cols()), data[1]*float32(frame.Mat.Rows()), data[2]*float32(frame.Mat.Cols()), data[3]*float32(frame.Mat.Rows())
 					x := int(cx - w/2)
 					y := int(cy - h/2)

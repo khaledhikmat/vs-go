@@ -57,7 +57,7 @@ This library provides a sample `main.go` file that can be used to bootstrap the 
 ## Go Module
 
 ```bash
-go mod init github.com/khaledhikmat/video-surveillance
+go mod init github.com/khaledhikmat/vs-go
 go get -u gocv.io/x/gocv
 go get -u github.com/joho/godotenv
 ```
@@ -91,6 +91,47 @@ We provide two sample Dockerfiles: one uses the OpenCV base image (i.e. `Dockerf
   - `git tag -a v1.0.0 -m "my great work"`
   - `git tag` to make sure is is created.
   - `git push --tags` to push tags to Github.
+
+## Yolo5 Support
+
+In order for a YOLO5 model to work with GoCV, one must use OpenCV's `ReadNet` but the model must be exported to `onnx` format:
+
+```golang
+net := gocv.ReadNet("yolov5s.onnx")
+```
+
+Here are the steps:
+
+- Download YOLO5 weights file:
+
+```bash
+# download the yolo5 weight file from: 
+https://github.com/ultralytics/yolov5/releases/download/v6.0/yolov5s.pt
+```
+
+- In order to export a trained model to different formats, Ultralytics provides [a utility](https://github.com/ultralytics/yolov5/blob/master/export.py) that can export to ONNX.
+
+To produce an `ONNX` file, run this utility:
+
+```bash
+mkdir temp
+cd temp
+git clone https://github.com/ultralytics/yolov5
+cd yolov5
+# create Py env
+python3 -m venv venv
+# activate Py env
+source venv/bin/activate
+# deactivate Py env
+deactivate
+# install dependencies
+pip3 install -r requirements.txt
+# place the downloaded `yolov5s.pt` in the `yolo5` directory 
+# export to ONNX
+python3 export.py --weights yolov5s.pt --img 640 --batch 1 --include onnx
+```
+
+The output would be `yolov5s.onnx` which can be used used directly in Go via `gocv.ReadNet("yolov5s.onnx")`. 
 
 ## Issues
 
