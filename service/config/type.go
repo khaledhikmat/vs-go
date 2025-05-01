@@ -13,4 +13,7 @@ type IService interface {
 	GetAgentsMonitorMaxOrphanedCameras() int
 	GetStreamerMaxWorkers() int
 	GetRecorderStreamerClipDuration() int
+	GetYolo5StreamerModelPath() string
+	GetYolo5CocoNamesPath() string
+	GetYolo5ConfidenceThreshold() float32
 }

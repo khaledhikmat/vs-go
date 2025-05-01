@@ -79,3 +79,20 @@ func (svc *hardcodedService) GetRecorderStreamerClipDuration() int {
 	// In the future, this should be read from a configuration file or environment variable.
 	return 3
 }
+
+func (svc *hardcodedService) GetYolo5StreamerModelPath() string {
+	// For now, we are using a hardcoded value.
+	// In the future, this should be read from a configuration file or environment variable.
+	return "./yolo5/yolo5s.pt"
+}
+
+func (svc *hardcodedService) GetYolo5CocoNamesPath() string {
+	// For now, we are using a hardcoded value.
+	// In the future, this should be read from a configuration file or environment variable.
+	return "./yolo5/coco.names"
+}
+func (svc *hardcodedService) GetYolo5ConfidenceThreshold() float32 {
+	// For now, we are using a hardcoded value.
+	// In the future, this should be read from a configuration file or environment variable.
+	return 0.7
+}
