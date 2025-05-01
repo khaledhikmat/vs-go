@@ -57,7 +57,7 @@ This library provides a sample `main.go` file that can be used to bootstrap the 
 ## Go Module
 
 ```bash
-go mod init github.com/khaledhikmat/video-surveillance
+go mod init github.com/khaledhikmat/vs-go
 go get -u gocv.io/x/gocv
 go get -u github.com/joho/godotenv
 ```
@@ -94,34 +94,6 @@ We provide two sample Dockerfiles: one uses the OpenCV base image (i.e. `Dockerf
 
 ## Yolo5 Support
 
-### Python VENV
-
-- Create a new VENV:
-
-```bash
-python3 -m venv venv
-```
-
-- Activate the VENV:
-
-```bash
-source venv/bin/activate
-```
-
-- Install requirements:
-
-```bash
-pip install -r requirements.txt
-```
-
-- Deactivate VENV:
-
-```bash
-deactivate
-```
-
-### Model
-
 In order for a YOLO5 model to work with GoCV, one must use OpenCV's `ReadNet` but the model must be exported to `onnx` format:
 
 ```golang
@@ -146,8 +118,15 @@ mkdir temp
 cd temp
 git clone https://github.com/ultralytics/yolov5
 cd yolov5
+# create Py env
+python3 -m venv venv
+# activate Py env
+source venv/bin/activate
+# deactivate Py env
+deactivate
+# install dependencies
 pip3 install -r requirements.txt
-# place the `yolov5s.pt` in the yolo5 directory 
+# place the downloaded `yolov5s.pt` in the `yolo5` directory 
 # export to ONNX
 python3 export.py --weights yolov5s.pt --img 640 --batch 1 --include onnx
 ```
