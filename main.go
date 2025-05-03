@@ -105,8 +105,9 @@ func main() {
 
 	// Decide on streamers
 	streamers := []pipeline.Streamer{
-		pipeline.SimpleDetector,
-		//pipeline.MP4Recorder,
+		// pipeline.SimpleDetector,
+		// pipeline.MP4Recorder,
+		pipeline.Yolo5Detector,
 	}
 
 	// Use the library simple alerter

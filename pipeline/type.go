@@ -15,6 +15,10 @@ import (
 	"gocv.io/x/gocv"
 )
 
+const (
+	waitBeforeCancel = 3 * time.Second
+)
+
 type ServicesFactory struct {
 	CfgSvc       config.IService
 	DataSvc      data.IService

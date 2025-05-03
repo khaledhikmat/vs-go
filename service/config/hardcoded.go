@@ -72,18 +72,18 @@ func (svc *hardcodedService) GetAgentsMonitorMaxOrphanedCameras() int {
 func (svc *hardcodedService) GetStreamerMaxWorkers() int {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return 3
+	return 1
 }
 func (svc *hardcodedService) GetRecorderStreamerClipDuration() int {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return 3
+	return 6
 }
 
 func (svc *hardcodedService) GetYolo5StreamerModelPath() string {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return "./yolo5/yolo5s.pt"
+	return "./yolo5/yolov5s.onnx"
 }
 
 func (svc *hardcodedService) GetYolo5CocoNamesPath() string {

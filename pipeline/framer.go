@@ -63,7 +63,7 @@ func rtspFramer(canxCtx context.Context, svcs ServicesFactory, camera model.Came
 			img := gocv.NewMat()
 			if ok := webcam.Read(&img); !ok || img.Empty() {
 				errors++
-				img.Close()
+				img.Close() // Crucial to close the image to avoid memory leaks
 				continue
 			}
 
@@ -71,21 +71,24 @@ func rtspFramer(canxCtx context.Context, svcs ServicesFactory, camera model.Came
 			// Determine if we should skip the frame
 			if svcs.InferenceSvc.CanSkipFrame(frames) {
 				skippedFrames++
+				img.Close() // Crucial to close the image to avoid memory leaks
 				continue
 			}
 
 			for _, streamChan := range streamChannels {
 				// WARNING: We need an extra check to make sure we don't send on c closed channel
 				select {
-				case streamChan <- FrameData{Mat: img.Clone(), Timestamp: time.Now()}:
-					// Successfully sent to the channel
 				case <-canxCtx.Done():
 					// Context canceled, stop sending
 					lgr.Logger.Info("rtspFramer context cancelled while sending!!")
+					img.Close() // Crucial to close the image to avoid memory leaks
+					return
+				case streamChan <- FrameData{Mat: img.Clone(), Timestamp: time.Now()}:
+					// Successfully sent to the channel
 				}
 			}
 
-			img.Close()
+			img.Close() // Crucial to close the image to avoid memory leaks
 		}
 	}
 }
@@ -134,15 +137,17 @@ func randomFramer(canxCtx context.Context, svcs ServicesFactory, camera model.Ca
 			for _, streamChan := range streamChannels {
 				// WARNING: We need an extra check to make sure we don't send on c closed channel
 				select {
-				case streamChan <- FrameData{Mat: img.Clone(), Timestamp: time.Now()}:
-					// Successfully sent to the channel
 				case <-canxCtx.Done():
 					// Context canceled, stop sending
 					lgr.Logger.Info("randomFramer context cancelled while sending!!")
+					img.Close() // Crucial to close the image to avoid memory leaks
+					return
+				case streamChan <- FrameData{Mat: img.Clone(), Timestamp: time.Now()}:
+					// Successfully sent to the channel
 				}
 			}
 
-			img.Close()
+			img.Close() // Crucial to close the image to avoid memory leaks
 		}
 	}
 }

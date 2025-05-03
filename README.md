@@ -60,6 +60,7 @@ This library provides a sample `main.go` file that can be used to bootstrap the 
 go mod init github.com/khaledhikmat/vs-go
 go get -u gocv.io/x/gocv
 go get -u github.com/joho/godotenv
+go get github.com/natefinch/lumberjack
 ```
 
 ## Pre-requisites
@@ -160,4 +161,10 @@ for _, streamChan := range streamChannels {
   - Add clip-generator streamer. Generate 5-second clips, store them locally and stream them.
   - Add clip-processor streamer to capture the 5-second clips, store them in S3 with 30-min TTL, delete local copy and invoke the model over API. If alert, stream to alerter.
 - In short, GoCV is fit for detection while native RTSP in Go is fit for storage and WebRTC streaming.
+- GoCV behavior:
+  - GoCV uses OpenCV under the hood, and OpenCV allocates native memory (C/C++ level) for image frames, matrices, and intermediate buffers.
+  - In Go, the garbage collector (GC) only tracks Go heap memory — it is completely unaware of the C/C++ memory that OpenCV is using.
+  - Hence it is very important to pay attention to `img.Close()` to close the image to avoid memory leaks. All of these GoCV functions may leak memory: `gocv.Mat`, `gocv.VideoCapture`, `gocv.Window`.
+  - When we stream to multiple detectors from the framer, we clone the image from the framer. Care must be taken to close the cloned image on the detector side. 
+  - Running inside VS Code tends to aggregate the memory problems because it (i.e. VS Code) is running in its own Electron sandbox which uses a lot of memory.  
 
