@@ -17,6 +17,10 @@ import (
 	"gocv.io/x/gocv"
 )
 
+const (
+	objectConfidenceThresh = float32(0.25)
+)
+
 // Global logger instance
 var y5DetectionLogger = &lumberjack.Logger{
 	Filename:   "detections.log",
@@ -122,7 +126,6 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				return
 			}
 
-			//fmt.Println("dims:", dims)
 			reshaped := output.Reshape(1, dims[1])
 			defer reshaped.Close()
 
@@ -134,31 +137,47 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				row.Close()
 
 				// Check if the row is empty or has insufficient data
-				if okErr != nil || data == nil || len(data) < 5 {
+				// Ignore the rows that have very low object confidence
+				if okErr != nil || data == nil || len(data) < 5 || data[4] < objectConfidenceThresh {
 					continue
 				}
 
-				dets := extractDetections(frame.Mat, labels, data, svcs.CfgSvc.GetYolo5ConfidenceThreshold())
+				dets := extractDetections(i, frame.Mat, labels, data, svcs.CfgSvc.GetYolo5ConfidenceThreshold(), svcs.CfgSvc.IsYolo5Logging())
 				allDetections = append(allDetections, dets...)
 			}
 
-			if len(allDetections) > 0 {
-				logDetections(camera.Name, allDetections)
+			if len(allDetections) == 0 {
+				return
 			}
 
+			fmt.Printf("FRAME DETECTIONS: %d\n", len(allDetections))
+
+			// Find the best detection
+			// We don't need multiple detections per frame
+			maxConfidence := float32(0.0)
+			bestDetection := y5Detection{}
 			for _, det := range allDetections {
-				fmt.Printf("ALERT: %s %.2f %.2f\n", det.Label, det.ObjectConfidence, det.ClassConfidence)
-				select {
-				case alertStream <- AlertData{
-					Mat:        frame.Mat.Clone(),
-					Camera:     camera,
-					Timestamp:  time.Now(),
-					Label:      det.Label,
-					Confidence: det.ObjectConfidence * det.ClassConfidence,
-				}:
-				default:
-					lgr.Logger.Warn("alertStream full, dropping alert")
+				if det.Confidence > maxConfidence {
+					maxConfidence = det.Confidence
+					bestDetection = det
 				}
+			}
+
+			if svcs.CfgSvc.IsYolo5Logging() {
+				logDetections(camera.Name, []y5Detection{bestDetection})
+			}
+
+			fmt.Printf("BEST DETECTION: %s %.2f %.2f\n", bestDetection.Label, bestDetection.ObjectConfidence, bestDetection.ClassConfidence)
+			select {
+			case alertStream <- AlertData{
+				Mat:        frame.Mat.Clone(),
+				Camera:     camera,
+				Timestamp:  time.Now(),
+				Label:      bestDetection.Label,
+				Confidence: bestDetection.ObjectConfidence * bestDetection.ClassConfidence,
+			}:
+			default:
+				lgr.Logger.Warn("alertStream full, dropping alert")
 			}
 		}
 
@@ -238,7 +257,7 @@ func loadLabels(path string) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-func extractDetections(frame gocv.Mat, labels []string, data []float32, confidenceThresh float32) []y5Detection {
+func extractDetections(idx int, frame gocv.Mat, labels []string, data []float32, confidenceThresh float32, logging bool) []y5Detection {
 	detections := []y5Detection{}
 
 	if len(data) < 5 {
@@ -267,19 +286,18 @@ func extractDetections(frame gocv.Mat, labels []string, data []float32, confiden
 		}
 	}
 
-	objectConfidenceThresh := float32(0.25)
 	finalConf := objectConfidence * classConfidence
 
-	logRows("camera", "pre", fmt.Sprintf("Row confidence: %f, class max score: %f (%s), finalConf: %f, class ID: %d\n", objectConfidence, classConfidence, labels[classID], finalConf, classID))
-
-	// Igore if the class is not important to us or the object and class confidences are low
+	// Ignore if the class is not important to us or the object and class confidences are low
 	if classID == -1 ||
 		objectConfidence < objectConfidenceThresh ||
 		finalConf < confidenceThresh {
 		return detections
 	}
 
-	logRows("camera", "post", fmt.Sprintf("Row confidence: %f, class max score: %f (%s), finalConf: %f, class ID: %d\n", objectConfidence, classConfidence, labels[classID], finalConf, classID))
+	if logging {
+		logRows("camera", "post", fmt.Sprintf("Row %d confidence: %f, class max score: %f (%s), finalConf: %f, class ID: %d\n", idx, objectConfidence, classConfidence, labels[classID], finalConf, classID))
+	}
 
 	if !y5AllowedClasses[strings.ToLower(labels[classID])] {
 		return detections

@@ -96,3 +96,9 @@ func (svc *hardcodedService) GetYolo5ConfidenceThreshold() float32 {
 	// In the future, this should be read from a configuration file or environment variable.
 	return 0.7
 }
+
+func (svc *hardcodedService) IsYolo5Logging() bool {
+	// For now, we are using a hardcoded value.
+	// In the future, this should be read from a configuration file or environment variable.
+	return false
+}

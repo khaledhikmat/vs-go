@@ -74,6 +74,11 @@ We provide a sample [installation script](install_opencv_ffmpeg.sh) that can be 
 *Make sure that the `./settings` folder contains `cameras.json` file.*
 
 ```bash
+rm ./settings/*-stats.json
+rm ./settings/error.json
+rm ./recordings/*.*
+rm ./detections.log
+rm ./rows.log
 go run main.go
 ```
 

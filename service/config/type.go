@@ -16,4 +16,5 @@ type IService interface {
 	GetYolo5StreamerModelPath() string
 	GetYolo5CocoNamesPath() string
 	GetYolo5ConfidenceThreshold() float32
+	IsYolo5Logging() bool
 }
