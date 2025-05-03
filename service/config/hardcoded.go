@@ -1,6 +1,8 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type hardcodedService struct {
 }
@@ -72,33 +74,42 @@ func (svc *hardcodedService) GetAgentsMonitorMaxOrphanedCameras() int {
 func (svc *hardcodedService) GetStreamerMaxWorkers() int {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return 1
-}
-func (svc *hardcodedService) GetRecorderStreamerClipDuration() int {
-	// For now, we are using a hardcoded value.
-	// In the future, this should be read from a configuration file or environment variable.
-	return 6
+	return 3
 }
 
-func (svc *hardcodedService) GetYolo5StreamerModelPath() string {
-	// For now, we are using a hardcoded value.
-	// In the future, this should be read from a configuration file or environment variable.
-	return "./yolo5/yolov5s.onnx"
-}
+func (svc *hardcodedService) GetStreamerParameters(name string) StreamerParameters {
+	if name == "simpleDetector" {
+		return StreamerParameters{
+			ClipDuration:        0,
+			ModelPath:           "",
+			CocoNamesPath:       "",
+			ConfidenceThreshold: 0,
+			CoolDownPeriod:      0,
+			Logging:             false,
+		}
+	}
 
-func (svc *hardcodedService) GetYolo5CocoNamesPath() string {
-	// For now, we are using a hardcoded value.
-	// In the future, this should be read from a configuration file or environment variable.
-	return "./yolo5/coco.names"
-}
-func (svc *hardcodedService) GetYolo5ConfidenceThreshold() float32 {
-	// For now, we are using a hardcoded value.
-	// In the future, this should be read from a configuration file or environment variable.
-	return 0.7
-}
+	if name == "mp4Recorder" {
+		return StreamerParameters{
+			ClipDuration:        6,
+			ModelPath:           "",
+			CocoNamesPath:       "",
+			ConfidenceThreshold: 0,
+			CoolDownPeriod:      0,
+			Logging:             false,
+		}
+	}
 
-func (svc *hardcodedService) IsYolo5Logging() bool {
-	// For now, we are using a hardcoded value.
-	// In the future, this should be read from a configuration file or environment variable.
-	return false
+	if name == "yolo5Detector" {
+		return StreamerParameters{
+			ClipDuration:        0,
+			ModelPath:           "./yolo5/yolov5s.onnx",
+			CocoNamesPath:       "./yolo5/coco.names",
+			ConfidenceThreshold: 0.7,
+			CoolDownPeriod:      5,
+			Logging:             false,
+		}
+	}
+
+	return StreamerParameters{}
 }

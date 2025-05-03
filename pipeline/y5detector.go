@@ -9,16 +9,14 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/khaledhikmat/vs-go/model"
+	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/lgr"
 	"github.com/natefinch/lumberjack"
 	"gocv.io/x/gocv"
-)
-
-const (
-	objectConfidenceThresh = float32(0.25)
 )
 
 // Global logger instance
@@ -61,11 +59,11 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 
 		lgr.Logger.Info("yolo5 detector starting...",
 			slog.String("camera", camera.Name),
-			slog.String("model", svcs.CfgSvc.GetYolo5StreamerModelPath()),
+			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
 			slog.String("openCV", gocv.Version()),
 		)
 
-		modelPath := svcs.CfgSvc.GetYolo5StreamerModelPath()
+		modelPath := svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath
 		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 			errorStream <- model.GenError("agent_yolo5_detector",
 				fmt.Errorf("no yolo5 model exists"),
@@ -93,7 +91,7 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			return
 		}
 
-		labels := loadLabels(svcs.CfgSvc.GetYolo5CocoNamesPath())
+		labels := loadLabels(svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).CocoNamesPath)
 
 		flush := func() {
 			// TODO:
@@ -103,6 +101,10 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 		lgr.Logger.Info("yolo5 detector initialized...",
 			slog.String("model", modelPath),
 		)
+
+		var lastAlertTime = make(map[string]time.Time)
+		var alertMutex = sync.Mutex{}
+		var cooldown = time.Duration(svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).CoolDownPeriod) * time.Second
 
 		proc := func(frame FrameData) {
 			defer frame.Mat.Close()
@@ -138,11 +140,11 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 
 				// Check if the row is empty or has insufficient data
 				// Ignore the rows that have very low object confidence
-				if okErr != nil || data == nil || len(data) < 5 || data[4] < objectConfidenceThresh {
+				if okErr != nil || data == nil || len(data) < 5 || data[4] < svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold {
 					continue
 				}
 
-				dets := extractDetections(i, frame.Mat, labels, data, svcs.CfgSvc.GetYolo5ConfidenceThreshold(), svcs.CfgSvc.IsYolo5Logging())
+				dets := extractDetections(i, frame.Mat, labels, data, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ConfidenceThreshold, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).Logging)
 				allDetections = append(allDetections, dets...)
 			}
 
@@ -163,8 +165,22 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				}
 			}
 
-			if svcs.CfgSvc.IsYolo5Logging() {
+			if svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).Logging {
 				logDetections(camera.Name, []y5Detection{bestDetection})
+			}
+
+			shouldAlert := false
+			alertMutex.Lock()
+			lastTime, exists := lastAlertTime[bestDetection.Label]
+			if !exists || time.Since(lastTime) > cooldown {
+				shouldAlert = true
+				lastAlertTime[bestDetection.Label] = time.Now()
+			}
+			alertMutex.Unlock()
+
+			if !shouldAlert {
+				fmt.Println("Skipping alert due to cooldown period")
+				return
 			}
 
 			fmt.Printf("BEST DETECTION: %s %.2f %.2f\n", bestDetection.Label, bestDetection.ObjectConfidence, bestDetection.ClassConfidence)
@@ -257,7 +273,7 @@ func loadLabels(path string) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-func extractDetections(idx int, frame gocv.Mat, labels []string, data []float32, confidenceThresh float32, logging bool) []y5Detection {
+func extractDetections(idx int, frame gocv.Mat, labels []string, data []float32, confidenceThresh float32, objectConfidenceThresh float32, logging bool) []y5Detection {
 	detections := []y5Detection{}
 
 	if len(data) < 5 {
