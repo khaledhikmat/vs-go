@@ -44,6 +44,8 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 	go func() {
 		defer close(in)
 
+		//gocv.Set(gocv.LogLevelSilent)
+
 		lgr.Logger.Info("yolo5 detector starting...",
 			slog.String("camera", camera.Name),
 			slog.String("model", svcs.CfgSvc.GetYolo5StreamerModelPath()),
@@ -164,6 +166,9 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 					endTime = time.Now().Unix()
 					uptime := endTime - beginTime
 					fps := int(float64(frames) / float64(uptime))
+					if fps == 0 {
+						fps = 1
+					}
 
 					// Calculate average processing time
 					var AvgProcTime float64
