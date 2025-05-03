@@ -1,5 +1,22 @@
 package config
 
+// Streamer names
+const (
+	MP4RecorderName    = "mp4Recorder"
+	SimpleDetectorName = "simpleDetector"
+	Yolo5DetectorName  = "yolo5Detector"
+)
+
+type StreamerParameters struct {
+	ClipDuration              int     `yaml:"clipDuration"`
+	ModelPath                 string  `yaml:"modelPath"`
+	CocoNamesPath             string  `yaml:"cocoNamesPath"`
+	ObjectConfidenceThreshold float32 `yaml:"objectConfidenceThreshold"`
+	ConfidenceThreshold       float32 `yaml:"confidenceThreshold"`
+	CoolDownPeriod            int     `yaml:"coolDownPeriod"`
+	Logging                   bool    `yaml:"logging"`
+}
+
 type IService interface {
 	GetModeMaxShutdownTime() int
 	GetInputFolder() string
@@ -12,8 +29,5 @@ type IService interface {
 	GetAgentsMonitorPeriodicTimeout() int
 	GetAgentsMonitorMaxOrphanedCameras() int
 	GetStreamerMaxWorkers() int
-	GetRecorderStreamerClipDuration() int
-	GetYolo5StreamerModelPath() string
-	GetYolo5CocoNamesPath() string
-	GetYolo5ConfidenceThreshold() float32
+	GetStreamerParameters(name string) StreamerParameters
 }

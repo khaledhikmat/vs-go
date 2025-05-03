@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/khaledhikmat/vs-go/model"
+	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/lgr"
 	"gocv.io/x/gocv"
 )
@@ -107,7 +108,7 @@ func MP4Recorder(canx context.Context, svcs ServicesFactory, camera model.Camera
 		proc := func(frame FrameData) bool {
 			buffer = append(buffer, frame)
 
-			if time.Since(recordingTime) >= time.Duration(svcs.CfgSvc.GetRecorderStreamerClipDuration())*time.Second {
+			if time.Since(recordingTime) >= time.Duration(svcs.CfgSvc.GetStreamerParameters(config.MP4RecorderName).ClipDuration)*time.Second {
 				clonedBuffer := make([]FrameData, len(buffer))
 				for i, f := range buffer {
 					clonedBuffer[i] = FrameData{

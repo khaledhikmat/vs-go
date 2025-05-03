@@ -18,6 +18,6 @@ func (svc *fakeService) Invoke(_ string, _ string) (Result, error) {
 // Only 1 of out 10 frames is processed
 // This is just a placeholder for the actual implementation
 func (svc *fakeService) CanSkipFrame(frames int) bool {
-	// return frames%10 != 0
-	return false
+	return frames%10 != 0
+	// return false
 }

@@ -9,9 +9,11 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/khaledhikmat/vs-go/model"
+	"github.com/khaledhikmat/vs-go/service/config"
 	"github.com/khaledhikmat/vs-go/service/lgr"
 	"github.com/natefinch/lumberjack"
 	"gocv.io/x/gocv"
@@ -26,16 +28,25 @@ var y5DetectionLogger = &lumberjack.Logger{
 	Compress:   true, // compress old logs
 }
 
+var y5RowLogger = &lumberjack.Logger{
+	Filename:   "rows.log",
+	MaxSize:    1000, // MB
+	MaxBackups: 5,
+	MaxAge:     7,    // days
+	Compress:   true, // compress old logs
+}
+
 var y5AllowedClasses = map[string]bool{
 	"person": true,
-	"knife":  true,
 	// Add more as needed
 }
 
 type y5Detection struct {
-	Label      string          `json:"label"`
-	Confidence float32         `json:"confidence"`
-	Rect       image.Rectangle `json:"rect"`
+	Label            string          `json:"label"`
+	ObjectConfidence float32         `json:"objectConfidence"`
+	ClassConfidence  float32         `json:"classConfidence"`
+	Confidence       float32         `json:"confidence"`
+	Rect             image.Rectangle `json:"rect"`
 }
 
 func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, alertStream chan AlertData) chan FrameData {
@@ -44,13 +55,15 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 	go func() {
 		defer close(in)
 
+		//gocv.Set(gocv.LogLevelSilent)
+
 		lgr.Logger.Info("yolo5 detector starting...",
 			slog.String("camera", camera.Name),
-			slog.String("model", svcs.CfgSvc.GetYolo5StreamerModelPath()),
+			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
 			slog.String("openCV", gocv.Version()),
 		)
 
-		modelPath := svcs.CfgSvc.GetYolo5StreamerModelPath()
+		modelPath := svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath
 		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 			errorStream <- model.GenError("agent_yolo5_detector",
 				fmt.Errorf("no yolo5 model exists"),
@@ -78,7 +91,7 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			return
 		}
 
-		labels := loadLabels(svcs.CfgSvc.GetYolo5CocoNamesPath())
+		labels := loadLabels(svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).CocoNamesPath)
 
 		flush := func() {
 			// TODO:
@@ -89,16 +102,19 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			slog.String("model", modelPath),
 		)
 
+		var lastAlertTime = make(map[string]time.Time)
+		var alertMutex = sync.Mutex{}
+		var cooldown = time.Duration(svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).CoolDownPeriod) * time.Second
+
 		proc := func(frame FrameData) {
+			defer frame.Mat.Close()
+
 			if frame.Mat.Empty() {
 				fmt.Println("Skipping empty frame due to decode error")
 				return
 			}
 
-			matClone := frame.Mat.Clone()
-			defer matClone.Close()
-
-			blob := gocv.BlobFromImage(matClone, 1.0/255.0, image.Pt(640, 640), gocv.NewScalar(0, 0, 0, 0), true, false)
+			blob := gocv.BlobFromImage(frame.Mat, 1.0/255.0, image.Pt(640, 640), gocv.NewScalar(0, 0, 0, 0), true, false)
 			defer blob.Close()
 
 			net.SetInput(blob, "")
@@ -121,31 +137,63 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				row := reshaped.RowRange(i, i+1)
 				data, okErr := row.DataPtrFloat32()
 				row.Close()
-				if okErr != nil || data == nil || len(data) < 5 {
+
+				// Check if the row is empty or has insufficient data
+				// Ignore the rows that have very low object confidence
+				if okErr != nil || data == nil || len(data) < 5 || data[4] < svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold {
 					continue
 				}
 
-				dets := extractDetections(matClone, labels, data, svcs.CfgSvc.GetYolo5ConfidenceThreshold())
+				dets := extractDetections(i, frame.Mat, labels, data, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ConfidenceThreshold, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).Logging)
 				allDetections = append(allDetections, dets...)
 			}
 
-			if len(allDetections) > 0 {
-				logDetections(camera.Name, allDetections)
+			if len(allDetections) == 0 {
+				return
 			}
 
+			fmt.Printf("FRAME DETECTIONS: %d\n", len(allDetections))
+
+			// Find the best detection
+			// We don't need multiple detections per frame
+			maxConfidence := float32(0.0)
+			bestDetection := y5Detection{}
 			for _, det := range allDetections {
-				fmt.Printf("ALERT: %s %.2f\n", det.Label, det.Confidence)
-				select {
-				case alertStream <- AlertData{
-					Mat:        matClone.Clone(),
-					Camera:     camera,
-					Timestamp:  time.Now(),
-					Label:      det.Label,
-					Confidence: det.Confidence,
-				}:
-				default:
-					lgr.Logger.Warn("alertStream full, dropping alert")
+				if det.Confidence > maxConfidence {
+					maxConfidence = det.Confidence
+					bestDetection = det
 				}
+			}
+
+			if svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).Logging {
+				logDetections(camera.Name, []y5Detection{bestDetection})
+			}
+
+			shouldAlert := false
+			alertMutex.Lock()
+			lastTime, exists := lastAlertTime[bestDetection.Label]
+			if !exists || time.Since(lastTime) > cooldown {
+				shouldAlert = true
+				lastAlertTime[bestDetection.Label] = time.Now()
+			}
+			alertMutex.Unlock()
+
+			if !shouldAlert {
+				fmt.Println("Skipping alert due to cooldown period")
+				return
+			}
+
+			fmt.Printf("BEST DETECTION: %s %.2f %.2f\n", bestDetection.Label, bestDetection.ObjectConfidence, bestDetection.ClassConfidence)
+			select {
+			case alertStream <- AlertData{
+				Mat:        frame.Mat.Clone(),
+				Camera:     camera,
+				Timestamp:  time.Now(),
+				Label:      bestDetection.Label,
+				Confidence: bestDetection.ObjectConfidence * bestDetection.ClassConfidence,
+			}:
+			default:
+				lgr.Logger.Warn("alertStream full, dropping alert")
 			}
 		}
 
@@ -164,6 +212,9 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 					endTime = time.Now().Unix()
 					uptime := endTime - beginTime
 					fps := int(float64(frames) / float64(uptime))
+					if fps == 0 {
+						fps = 1
+					}
 
 					// Calculate average processing time
 					var AvgProcTime float64
@@ -222,7 +273,7 @@ func loadLabels(path string) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-func extractDetections(frame gocv.Mat, labels []string, data []float32, confidenceThresh float32) []y5Detection {
+func extractDetections(idx int, frame gocv.Mat, labels []string, data []float32, confidenceThresh float32, objectConfidenceThresh float32, logging bool) []y5Detection {
 	detections := []y5Detection{}
 
 	if len(data) < 5 {
@@ -230,32 +281,42 @@ func extractDetections(frame gocv.Mat, labels []string, data []float32, confiden
 		return detections
 	}
 
-	confidence := data[4]
+	objectConfidence := data[4] // objectness
 	classScores := data[5:]
+
 	if len(classScores) != len(labels) {
 		fmt.Printf("Skipping row: classScores len=%d does not match labels len=%d\n", len(classScores), len(labels))
 		return detections
 	}
 
-	classID := 0
-	maxScore := float32(0.0)
+	classID := -1
+	classConfidence := float32(0.0)
 	for j, score := range classScores {
-		if score > maxScore {
-			maxScore = score
+		label := strings.ToLower(labels[j])
+		if !y5AllowedClasses[label] {
+			continue
+		}
+		if score > classConfidence {
+			classConfidence = score
 			classID = j
 		}
 	}
 
-	finalConf := confidence * maxScore
+	finalConf := objectConfidence * classConfidence
 
-	//fmt.Printf("Row confidence: %f, class max score: %f (%s), finalConf: %f\n", confidence, maxScore, labels[classID], finalConf)
-
-	if finalConf < confidenceThresh {
+	// Ignore if the class is not important to us or the object and class confidences are low
+	if classID == -1 ||
+		objectConfidence < objectConfidenceThresh ||
+		finalConf < confidenceThresh {
 		return detections
 	}
 
+	if logging {
+		logRows("camera", "post", fmt.Sprintf("Row %d confidence: %f, class max score: %f (%s), finalConf: %f, class ID: %d\n", idx, objectConfidence, classConfidence, labels[classID], finalConf, classID))
+	}
+
 	if !y5AllowedClasses[strings.ToLower(labels[classID])] {
-		return detections // Skip if class is not allowed
+		return detections
 	}
 
 	cx := data[0] * float32(frame.Cols())
@@ -267,12 +328,33 @@ func extractDetections(frame gocv.Mat, labels []string, data []float32, confiden
 	rect := image.Rect(x, y, x+int(w), y+int(h))
 
 	detections = append(detections, y5Detection{
-		Label:      labels[classID],
-		Confidence: finalConf,
-		Rect:       rect,
+		Label:            labels[classID],
+		ObjectConfidence: objectConfidence, // Is there anything here?
+		ClassConfidence:  classConfidence,  // what class is likely here?
+		Confidence:       finalConf,
+		Rect:             rect,
 	})
 
 	return detections
+}
+
+func logRows(camera, direction, message string) {
+	entry := map[string]interface{}{
+		"time":      time.Now().Format(time.RFC3339),
+		"camera":    camera,
+		"direction": direction,
+		"message":   message,
+	}
+
+	jsonData, err := json.MarshalIndent(entry, "", "  ") // pretty-print
+	if err != nil {
+		fmt.Println("Error marshaling rows:", err)
+		return
+	}
+
+	if _, err := y5RowLogger.Write(append(jsonData, '\n')); err != nil {
+		fmt.Println("Error writing to row log file:", err)
+	}
 }
 
 func logDetections(cameraName string, detections []y5Detection) {
@@ -301,6 +383,6 @@ func logDetections(cameraName string, detections []y5Detection) {
 	}
 
 	if _, err := y5DetectionLogger.Write(append(jsonData, '\n')); err != nil {
-		fmt.Println("Error writing to log file:", err)
+		fmt.Println("Error writing to detection log file:", err)
 	}
 }
