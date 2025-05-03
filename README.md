@@ -124,16 +124,18 @@ mkdir temp
 cd temp
 git clone https://github.com/ultralytics/yolov5
 cd yolov5
-# create Py env
-python3 -m venv venv
-# activate Py env
-source venv/bin/activate
-# deactivate Py env
-deactivate
-# install dependencies
-pip3 install -r requirements.txt
+# create Conda env ...not venv environment using 3.9 Python
+brew install cmake
+brew install --cask miniconda
+conda create -n yolov5 python=3.9
+conda init bash
+source ~/.bash_profile
+conda activate yolov5
+conda install pytorch==1.12.1 torchvision==0.13.1 cpuonly -c pytorch
+pip install onnx==1.12.0 onnxruntime==1.12.1
+pip install -r requirements.txt
 # place the downloaded `yolov5s.pt` in the `yolo5` directory 
-# export to ONNX
+python3 export.py --weights yolov5s.pt --include onnx --opset 12
 python3 export.py --weights yolov5s.pt --img 640 --batch 1 --include onnx
 ```
 
