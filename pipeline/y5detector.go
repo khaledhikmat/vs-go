@@ -26,16 +26,25 @@ var y5DetectionLogger = &lumberjack.Logger{
 	Compress:   true, // compress old logs
 }
 
+var y5RowLogger = &lumberjack.Logger{
+	Filename:   "rows.log",
+	MaxSize:    1000, // MB
+	MaxBackups: 5,
+	MaxAge:     7,    // days
+	Compress:   true, // compress old logs
+}
+
 var y5AllowedClasses = map[string]bool{
 	"person": true,
-	"knife":  true,
 	// Add more as needed
 }
 
 type y5Detection struct {
-	Label      string          `json:"label"`
-	Confidence float32         `json:"confidence"`
-	Rect       image.Rectangle `json:"rect"`
+	Label            string          `json:"label"`
+	ObjectConfidence float32         `json:"objectConfidence"`
+	ClassConfidence  float32         `json:"classConfidence"`
+	Confidence       float32         `json:"confidence"`
+	Rect             image.Rectangle `json:"rect"`
 }
 
 func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Camera, errorStream chan interface{}, statsStream chan interface{}, alertStream chan AlertData) chan FrameData {
@@ -92,15 +101,14 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 		)
 
 		proc := func(frame FrameData) {
+			defer frame.Mat.Close()
+
 			if frame.Mat.Empty() {
 				fmt.Println("Skipping empty frame due to decode error")
 				return
 			}
 
-			matClone := frame.Mat.Clone()
-			defer matClone.Close()
-
-			blob := gocv.BlobFromImage(matClone, 1.0/255.0, image.Pt(640, 640), gocv.NewScalar(0, 0, 0, 0), true, false)
+			blob := gocv.BlobFromImage(frame.Mat, 1.0/255.0, image.Pt(640, 640), gocv.NewScalar(0, 0, 0, 0), true, false)
 			defer blob.Close()
 
 			net.SetInput(blob, "")
@@ -114,6 +122,7 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				return
 			}
 
+			//fmt.Println("dims:", dims)
 			reshaped := output.Reshape(1, dims[1])
 			defer reshaped.Close()
 
@@ -123,11 +132,13 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				row := reshaped.RowRange(i, i+1)
 				data, okErr := row.DataPtrFloat32()
 				row.Close()
+
+				// Check if the row is empty or has insufficient data
 				if okErr != nil || data == nil || len(data) < 5 {
 					continue
 				}
 
-				dets := extractDetections(matClone, labels, data, svcs.CfgSvc.GetYolo5ConfidenceThreshold())
+				dets := extractDetections(frame.Mat, labels, data, svcs.CfgSvc.GetYolo5ConfidenceThreshold())
 				allDetections = append(allDetections, dets...)
 			}
 
@@ -136,14 +147,14 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			}
 
 			for _, det := range allDetections {
-				fmt.Printf("ALERT: %s %.2f\n", det.Label, det.Confidence)
+				fmt.Printf("ALERT: %s %.2f %.2f\n", det.Label, det.ObjectConfidence, det.ClassConfidence)
 				select {
 				case alertStream <- AlertData{
-					Mat:        matClone.Clone(),
+					Mat:        frame.Mat.Clone(),
 					Camera:     camera,
 					Timestamp:  time.Now(),
 					Label:      det.Label,
-					Confidence: det.Confidence,
+					Confidence: det.ObjectConfidence * det.ClassConfidence,
 				}:
 				default:
 					lgr.Logger.Warn("alertStream full, dropping alert")
@@ -235,32 +246,43 @@ func extractDetections(frame gocv.Mat, labels []string, data []float32, confiden
 		return detections
 	}
 
-	confidence := data[4]
+	objectConfidence := data[4] // objectness
 	classScores := data[5:]
+
 	if len(classScores) != len(labels) {
 		fmt.Printf("Skipping row: classScores len=%d does not match labels len=%d\n", len(classScores), len(labels))
 		return detections
 	}
 
-	classID := 0
-	maxScore := float32(0.0)
+	classID := -1
+	classConfidence := float32(0.0)
 	for j, score := range classScores {
-		if score > maxScore {
-			maxScore = score
+		label := strings.ToLower(labels[j])
+		if !y5AllowedClasses[label] {
+			continue
+		}
+		if score > classConfidence {
+			classConfidence = score
 			classID = j
 		}
 	}
 
-	finalConf := confidence * maxScore
+	objectConfidenceThresh := float32(0.25)
+	finalConf := objectConfidence * classConfidence
 
-	//fmt.Printf("Row confidence: %f, class max score: %f (%s), finalConf: %f\n", confidence, maxScore, labels[classID], finalConf)
+	logRows("camera", "pre", fmt.Sprintf("Row confidence: %f, class max score: %f (%s), finalConf: %f, class ID: %d\n", objectConfidence, classConfidence, labels[classID], finalConf, classID))
 
-	if finalConf < confidenceThresh {
+	// Igore if the class is not important to us or the object and class confidences are low
+	if classID == -1 ||
+		objectConfidence < objectConfidenceThresh ||
+		finalConf < confidenceThresh {
 		return detections
 	}
 
+	logRows("camera", "post", fmt.Sprintf("Row confidence: %f, class max score: %f (%s), finalConf: %f, class ID: %d\n", objectConfidence, classConfidence, labels[classID], finalConf, classID))
+
 	if !y5AllowedClasses[strings.ToLower(labels[classID])] {
-		return detections // Skip if class is not allowed
+		return detections
 	}
 
 	cx := data[0] * float32(frame.Cols())
@@ -272,12 +294,33 @@ func extractDetections(frame gocv.Mat, labels []string, data []float32, confiden
 	rect := image.Rect(x, y, x+int(w), y+int(h))
 
 	detections = append(detections, y5Detection{
-		Label:      labels[classID],
-		Confidence: finalConf,
-		Rect:       rect,
+		Label:            labels[classID],
+		ObjectConfidence: objectConfidence, // Is there anything here?
+		ClassConfidence:  classConfidence,  // what class is likely here?
+		Confidence:       finalConf,
+		Rect:             rect,
 	})
 
 	return detections
+}
+
+func logRows(camera, direction, message string) {
+	entry := map[string]interface{}{
+		"time":      time.Now().Format(time.RFC3339),
+		"camera":    camera,
+		"direction": direction,
+		"message":   message,
+	}
+
+	jsonData, err := json.MarshalIndent(entry, "", "  ") // pretty-print
+	if err != nil {
+		fmt.Println("Error marshaling rows:", err)
+		return
+	}
+
+	if _, err := y5RowLogger.Write(append(jsonData, '\n')); err != nil {
+		fmt.Println("Error writing to row log file:", err)
+	}
 }
 
 func logDetections(cameraName string, detections []y5Detection) {
@@ -306,6 +349,6 @@ func logDetections(cameraName string, detections []y5Detection) {
 	}
 
 	if _, err := y5DetectionLogger.Write(append(jsonData, '\n')); err != nil {
-		fmt.Println("Error writing to log file:", err)
+		fmt.Println("Error writing to detection log file:", err)
 	}
 }
