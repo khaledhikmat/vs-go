@@ -1,0 +1,59 @@
+# ---------- STAGE 1: Build GoCV + Go app ----------
+    FROM ubuntu:22.04 AS builder
+
+    # Install Go + build dependencies
+    RUN apt-get update && apt-get install -y \
+        git make cmake unzip wget curl build-essential pkg-config \
+        libgtk-3-dev libavcodec-dev libavformat-dev libswscale-dev \
+        libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libgdal-dev \
+        libomp-dev && \
+        wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && \
+        tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
+        ln -s /usr/local/go/bin/go /usr/local/bin/go && \
+        rm go1.23.2.linux-amd64.tar.gz && \
+        rm -rf /var/lib/apt/lists/*
+    
+    # Clone GoCV
+    WORKDIR /opt
+    RUN git clone https://github.com/hybridgroup/gocv.git
+    
+    # Remove sudo from Makefile (Docker runs as root)
+    RUN sed -i 's/sudo //g' /opt/gocv/Makefile
+    
+    # Build GoCV
+    WORKDIR /opt/gocv
+    RUN make install
+    
+    # Set library path for build stage
+    ENV LD_LIBRARY_PATH="/opt/gocv/build/lib:/usr/local/lib"
+    
+    # Build your Go app
+    WORKDIR /app
+    COPY . .
+    RUN go mod tidy && go build -o app main.go
+    
+    # ---------- STAGE 2: Slim runtime image ----------
+    FROM ubuntu:22.04
+    
+    # Install runtime dependencies only
+    RUN apt-get update && apt-get install -y \
+        libgtk-3-0 libavcodec58 libavformat58 libswscale5 \
+        libjpeg-turbo8 libpng16-16 libtiff5 libopenexr25 libgdal30 \
+        libomp5 libwebpdemux2 libtbb12 && \
+        rm -rf /var/lib/apt/lists/*
+    
+    # Copy GoCV runtime libraries from builder
+    COPY --from=builder /usr/local/lib /opt/gocv/build/lib
+    
+    # Copy compiled Go app
+    COPY --from=builder /app/app /app/app
+    
+    # Set library path for runtime stage
+    ENV LD_LIBRARY_PATH="/opt/gocv/build/lib:/usr/local/lib"
+    
+    # Set working directory
+    WORKDIR /app
+    
+    # Run the app
+    CMD ["./app"]
+    
