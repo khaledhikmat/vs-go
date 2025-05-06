@@ -74,7 +74,7 @@ func (svc *hardcodedService) GetAgentsMonitorMaxOrphanedCameras() int {
 func (svc *hardcodedService) GetStreamerMaxWorkers() int {
 	// For now, we are using a hardcoded value.
 	// In the future, this should be read from a configuration file or environment variable.
-	return 3
+	return 1
 }
 
 func (svc *hardcodedService) GetStreamerParameters(name string) StreamerParameters {

@@ -36,7 +36,7 @@ push-2-hub:
 run:
 	rm -f ./recordings/*.*
 	rm -f ./settings/*-stats.json
-	rm -f ./settings/error.json
+	rm -f ./settings/errors.json
 	go run main.go
 
 # unfortunately, the docker run command --network=host option does not work on MacOS or Windows.
@@ -44,6 +44,7 @@ run:
 start_cpu:
 	rm -f ./recordings/*.*
 	rm -f ./settings/*-stats.json
+	rm -f ./settings/errors.json
 	docker run --platform linux/amd64 --rm \
 		--network=host \
 		-v $(PROJECT_DIR)/recordings:/app/recordings \
@@ -53,6 +54,7 @@ start_cpu:
 start_cpu_it:
 	rm -f ./recordings/*.*
 	rm -f ./settings/*-stats.json
+	rm -f ./settings/errors.json
 	docker run --platform linux/amd64 -it --rm \
 		--network=host \
 		-v $(PROJECT_DIR)/recordings:/app/recordings \

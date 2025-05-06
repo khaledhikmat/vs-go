@@ -72,6 +72,12 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			return
 		}
 
+		lgr.Logger.Info("yolo5 detector got parameters...",
+			slog.String("camera", camera.Name),
+			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
+			slog.String("openCV", gocv.Version()),
+		)
+
 		net := gocv.ReadNet(modelPath, "")
 		if net.Empty() {
 			errorStream <- model.GenError("agent_yolo5_detector",
@@ -82,16 +88,41 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 		}
 		defer net.Close()
 
+		lgr.Logger.Info("yolo5 detector loaded model...",
+			slog.String("camera", camera.Name),
+			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
+			slog.String("openCV", gocv.Version()),
+		)
+
 		if err := net.SetPreferableBackend(gocv.NetBackendDefault); err != nil {
 			errorStream <- model.GenError("agent_yolo5_detector", err, nil, "error setting backend")
 			return
 		}
+
+		lgr.Logger.Info("yolo5 detector set preferrable backend...",
+			slog.String("camera", camera.Name),
+			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
+			slog.String("openCV", gocv.Version()),
+		)
+
 		if err := net.SetPreferableTarget(gocv.NetTargetCPU); err != nil {
 			errorStream <- model.GenError("agent_yolo5_detector", err, nil, "error setting target")
 			return
 		}
 
+		lgr.Logger.Info("yolo5 detector set preferrable target...",
+			slog.String("camera", camera.Name),
+			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
+			slog.String("openCV", gocv.Version()),
+		)
+
 		labels := loadLabels(svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).CocoNamesPath)
+
+		lgr.Logger.Info("yolo5 detector loaded labels...",
+			slog.String("camera", camera.Name),
+			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
+			slog.String("openCV", gocv.Version()),
+		)
 
 		flush := func() {
 			// TODO:
@@ -108,6 +139,12 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 
 		proc := func(frame FrameData) {
 			defer frame.Mat.Close()
+
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Recovered from panic: %v\n", r)
+				}
+			}()
 
 			if frame.Mat.Empty() {
 				fmt.Println("Skipping empty frame due to decode error")
@@ -129,6 +166,11 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			}
 
 			reshaped := output.Reshape(1, dims[1])
+			if reshaped.Empty() || reshaped.Rows() == 0 || reshaped.Cols() < 5 {
+				fmt.Println("Reshape failed or invalid dimensions")
+				reshaped.Close()
+				return
+			}
 			defer reshaped.Close()
 
 			var allDetections []y5Detection
@@ -140,7 +182,18 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 
 				// Check if the row is empty or has insufficient data
 				// Ignore the rows that have very low object confidence
-				if okErr != nil || data == nil || len(data) < 5 || data[4] < svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold {
+				if okErr != nil {
+					fmt.Printf("Row %d: DataPtrFloat32 error: %v\n", i, okErr)
+					continue
+				}
+
+				if data == nil || len(data) < 5 {
+					fmt.Printf("Row %d: invalid data length: %d\n", i, len(data))
+					continue
+				}
+
+				if data[4] < svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold {
+					fmt.Printf("Row %d: object confidence too low: %f\n", i, data[4])
 					continue
 				}
 

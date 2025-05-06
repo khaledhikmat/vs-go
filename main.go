@@ -104,8 +104,9 @@ func main() {
 	defer close(modeProcResult)
 
 	// Decide on streamers
+	// Change this to use a dynamic way to configure streamers
 	streamers := []pipeline.Streamer{
-		// pipeline.SimpleDetector,
+		//pipeline.SimpleDetector,
 		// pipeline.MP4Recorder,
 		pipeline.Yolo5Detector,
 	}
