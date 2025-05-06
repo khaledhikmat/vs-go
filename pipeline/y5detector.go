@@ -55,8 +55,6 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 	go func() {
 		defer close(in)
 
-		//gocv.Set(gocv.LogLevelSilent)
-
 		lgr.Logger.Info("yolo5 detector starting...",
 			slog.String("camera", camera.Name),
 			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
@@ -72,74 +70,14 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			return
 		}
 
-		lgr.Logger.Info("yolo5 detector got parameters...",
-			slog.String("camera", camera.Name),
-			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
-			slog.String("openCV", gocv.Version()),
-		)
-
-		net := gocv.ReadNet(modelPath, "")
-		if net.Empty() {
-			errorStream <- model.GenError("agent_yolo5_detector",
-				fmt.Errorf("error reading yolo5 model"),
-				map[string]interface{}{},
-				"error reading yolo5 model")
-			return
-		}
-		defer net.Close()
-
-		lgr.Logger.Info("yolo5 detector loaded model...",
-			slog.String("camera", camera.Name),
-			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
-			slog.String("openCV", gocv.Version()),
-		)
-
-		if err := net.SetPreferableBackend(gocv.NetBackendDefault); err != nil {
-			errorStream <- model.GenError("agent_yolo5_detector", err, nil, "error setting backend")
-			return
-		}
-
-		lgr.Logger.Info("yolo5 detector set preferrable backend...",
-			slog.String("camera", camera.Name),
-			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
-			slog.String("openCV", gocv.Version()),
-		)
-
-		if err := net.SetPreferableTarget(gocv.NetTargetCPU); err != nil {
-			errorStream <- model.GenError("agent_yolo5_detector", err, nil, "error setting target")
-			return
-		}
-
-		lgr.Logger.Info("yolo5 detector set preferrable target...",
-			slog.String("camera", camera.Name),
-			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
-			slog.String("openCV", gocv.Version()),
-		)
-
 		labels := loadLabels(svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).CocoNamesPath)
-
-		lgr.Logger.Info("yolo5 detector loaded labels...",
-			slog.String("camera", camera.Name),
-			slog.String("model", svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ModelPath),
-			slog.String("openCV", gocv.Version()),
-		)
-
-		flush := func() {
-			// TODO:
-		}
-		defer flush()
-
-		lgr.Logger.Info("yolo5 detector initialized...",
-			slog.String("model", modelPath),
-		)
 
 		var lastAlertTime = make(map[string]time.Time)
 		var alertMutex = sync.Mutex{}
 		var cooldown = time.Duration(svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).CoolDownPeriod) * time.Second
 
-		proc := func(frame FrameData) {
+		proc := func(frame FrameData, net *gocv.Net) {
 			defer frame.Mat.Close()
-
 			defer func() {
 				if r := recover(); r != nil {
 					fmt.Printf("Recovered from panic: %v\n", r)
@@ -174,30 +112,23 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			defer reshaped.Close()
 
 			var allDetections []y5Detection
-
 			for i := 0; i < reshaped.Rows(); i++ {
 				row := reshaped.RowRange(i, i+1)
 				data, okErr := row.DataPtrFloat32()
 				row.Close()
 
-				// Check if the row is empty or has insufficient data
-				// Ignore the rows that have very low object confidence
-				if okErr != nil {
-					fmt.Printf("Row %d: DataPtrFloat32 error: %v\n", i, okErr)
-					continue
-				}
-
-				if data == nil || len(data) < 5 {
-					fmt.Printf("Row %d: invalid data length: %d\n", i, len(data))
+				if okErr != nil || data == nil || len(data) < 5 {
 					continue
 				}
 
 				if data[4] < svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold {
-					fmt.Printf("Row %d: object confidence too low: %f\n", i, data[4])
 					continue
 				}
 
-				dets := extractDetections(i, frame.Mat, labels, data, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ConfidenceThreshold, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold, svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).Logging)
+				dets := extractDetections(i, frame.Mat, labels, data,
+					svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ConfidenceThreshold,
+					svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).ObjectConfidenceThreshold,
+					svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).Logging)
 				allDetections = append(allDetections, dets...)
 			}
 
@@ -205,10 +136,7 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 				return
 			}
 
-			fmt.Printf("FRAME DETECTIONS: %d\n", len(allDetections))
-
 			// Find the best detection
-			// We don't need multiple detections per frame
 			maxConfidence := float32(0.0)
 			bestDetection := y5Detection{}
 			for _, det := range allDetections {
@@ -216,10 +144,6 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 					maxConfidence = det.Confidence
 					bestDetection = det
 				}
-			}
-
-			if svcs.CfgSvc.GetStreamerParameters(config.Yolo5DetectorName).Logging {
-				logDetections(camera.Name, []y5Detection{bestDetection})
 			}
 
 			shouldAlert := false
@@ -232,11 +156,9 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			alertMutex.Unlock()
 
 			if !shouldAlert {
-				fmt.Println("Skipping alert due to cooldown period")
 				return
 			}
 
-			fmt.Printf("BEST DETECTION: %s %.2f %.2f\n", bestDetection.Label, bestDetection.ObjectConfidence, bestDetection.ClassConfidence)
 			select {
 			case alertStream <- AlertData{
 				Mat:        frame.Mat.Clone(),
@@ -250,16 +172,36 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 			}
 		}
 
-		// Launch worker processes that compete on emptying/procesing frames
 		for i := 0; i < svcs.CfgSvc.GetStreamerMaxWorkers(); i++ {
-			worker := i // Capture the loop variable
+			worker := i
 			go func(worker int, in chan FrameData) {
+				// WARNING: net is not thread-safe!!!
+				// So it must be created in each worker
+				net := gocv.ReadNet(modelPath, "")
+				if net.Empty() {
+					errorStream <- model.GenError("agent_yolo5_detector",
+						fmt.Errorf("worker %d: error reading yolo5 model", worker),
+						map[string]interface{}{},
+						"error reading yolo5 model")
+					return
+				}
+				defer net.Close()
+
+				if err := net.SetPreferableBackend(gocv.NetBackendDefault); err != nil {
+					errorStream <- model.GenError("agent_yolo5_detector", err, nil, "error setting backend")
+					return
+				}
+
+				if err := net.SetPreferableTarget(gocv.NetTargetCPU); err != nil {
+					errorStream <- model.GenError("agent_yolo5_detector", err, nil, "error setting target")
+					return
+				}
+
 				frames := 0
 				beginTime := time.Now().Unix()
 				endTime := time.Now().Unix()
 				errors := 0
-
-				var totalInferenceTime time.Duration // Track total processing time
+				var totalInferenceTime time.Duration
 
 				defer func() {
 					endTime = time.Now().Unix()
@@ -268,13 +210,10 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 					if fps == 0 {
 						fps = 1
 					}
-
-					// Calculate average processing time
 					var AvgProcTime float64
 					if frames > 0 {
 						AvgProcTime = totalInferenceTime.Seconds() / float64(frames)
 					}
-
 					statsStream <- model.StreamerStats{
 						Name:        "yolo5Detector",
 						Worker:      worker,
@@ -296,23 +235,18 @@ func Yolo5Detector(canx context.Context, svcs ServicesFactory, camera model.Came
 						)
 						return
 					default:
-						// Process frame
 						startInference := time.Now()
-						proc(f)
+						proc(f, &net)
 						frames++
-						totalInferenceTime += time.Since(startInference) // Accumulate processing time
+						totalInferenceTime += time.Since(startInference)
 					}
 				}
 			}(worker, in)
 		}
 
-		// Wait until cancelled
 		<-canx.Done()
-		// Give some time to the framer to recognize the context is cancelled
 		time.Sleep(waitBeforeCancel)
-		lgr.Logger.Info(
-			"yolo5Detector detector context cancelled",
-		)
+		lgr.Logger.Info("yolo5Detector detector context cancelled")
 	}()
 
 	return in
