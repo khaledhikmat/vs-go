@@ -15,7 +15,7 @@ https://betterstack.com/community/guides/logging/logging-in-go/
 */
 const (
 	appName = "video-surveillance"
-	appVer  = "0.0.1"
+	appVer  = "0.0.6"
 
 	envKey      = "RUN_TIME_ENV"
 	logLevelKey = "LOG_LEVEL"

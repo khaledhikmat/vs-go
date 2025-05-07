@@ -51,7 +51,7 @@ func main() {
 	}()
 
 	// Load env vars if we are in DEV mode
-	if os.Getenv("RUN_TIME_ENV") == "dev" || os.Getenv("RUN_TIME_ENV") == "" {
+	if os.Getenv("RUN_TIME_ENV") == "dev" {
 		lgr.Logger.Info("loading env vars from .env file")
 		err := godotenv.Load()
 		if err != nil {
@@ -104,8 +104,9 @@ func main() {
 	defer close(modeProcResult)
 
 	// Decide on streamers
+	// Change this to use a dynamic way to configure streamers
 	streamers := []pipeline.Streamer{
-		// pipeline.SimpleDetector,
+		//pipeline.SimpleDetector,
 		// pipeline.MP4Recorder,
 		pipeline.Yolo5Detector,
 	}

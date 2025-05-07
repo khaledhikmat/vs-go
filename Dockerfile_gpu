@@ -1,0 +1,77 @@
+FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu22.04
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git cmake unzip wget curl build-essential pkg-config \
+    libgtk-3-dev libavcodec-dev libavformat-dev libswscale-dev \
+    libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libgdal-dev \
+    libomp-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Go
+RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
+    rm go1.23.2.linux-amd64.tar.gz
+
+# Clone OpenCV + contrib
+WORKDIR /opt
+RUN git clone https://github.com/opencv/opencv.git && \
+    git clone https://github.com/opencv/opencv_contrib.git
+WORKDIR /opt/opencv
+RUN git checkout 4.8.0 && cd ../opencv_contrib && git checkout 4.8.0
+
+# Configure + build OpenCV
+RUN mkdir build && cd build && \
+    cmake -D CMAKE_BUILD_TYPE=Release \
+          -D CMAKE_INSTALL_PREFIX=/usr/local \
+          -D OPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib/modules \
+          -D WITH_CUDA=ON \
+          -D WITH_CUDNN=ON \
+          -D OPENCV_DNN_CUDA=ON \
+          -D BUILD_opencv_python3=OFF \
+          -D BUILD_EXAMPLES=OFF \
+          -D BUILD_TESTS=OFF \
+          -D BUILD_PERF_TESTS=OFF \
+          -D ENABLE_FAST_MATH=1 \
+          -D CUDA_FAST_MATH=1 \
+          -D WITH_CUBLAS=1 \
+          -D BUILD_opencv_world=ON \
+          .. > cmake_configure.log 2>&1 || \
+    (cat cmake_configure.log && exit 1) && \
+    make -j"$(nproc)" && make install && ldconfig
+
+# Build GoCV
+WORKDIR /opt
+RUN git clone https://github.com/hybridgroup/gocv.git && \
+    cd gocv && make install
+
+# Build your Go app
+WORKDIR /app
+COPY . .
+RUN go mod tidy && go build -o app main.go
+
+# ---------- RUNTIME STAGE ----------
+    FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu22.04
+
+# Install runtime libs
+RUN apt-get update && apt-get install -y \
+    libgtk-3-0 libavcodec58 libavformat58 libswscale5 \
+    libjpeg-turbo8 libpng16-16 libtiff5 libopenexr25 libgdal30 \
+    libomp5 libwebpdemux2 libtbb12 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy OpenCV + GoCV
+COPY --from=builder /usr/local /usr/local
+
+# Copy app binary
+COPY --from=builder /app/app /app/app
+
+# Set library path
+ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu"
+
+# Set working directory
+WORKDIR /app
+
+# Run the app
+CMD ["./app"]
