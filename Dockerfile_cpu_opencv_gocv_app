@@ -1,38 +1,39 @@
-# ---------- APP BUILDER ----------
-FROM khaledhimat/cpu-opencv-gocv:latest as builder
+# ---------- APP IMAGE: Add Go app on top ----------
+FROM yourname/cpu-opencv-gocv:latest  AS builder
 
-# Install Go
-RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
-    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
-    rm go1.23.2.linux-amd64.tar.gz
+# Set working directory
+WORKDIR /app
+
+# Copy your Go source code
+COPY . .
 
 # Build Go app
-WORKDIR /app
-COPY . .
 RUN go mod tidy && go build -o app main.go
 
 # ---------- FINAL RUNTIME IMAGE ----------
 FROM ubuntu:22.04
 
-# Install runtime dependencies
+# Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
     libgtk-3-0 libavcodec58 libavformat58 libswscale5 \
     libjpeg-turbo8 libpng16-16 libtiff5 libopenexr25 libgdal30 \
     libomp5 libwebpdemux2 libtbb12 && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy OpenCV + GoCV libs
+# Copy GoCV runtime libraries from builder stage
 COPY --from=builder /usr/local/lib /opt/gocv/build/lib
 
-# Copy app + any models
+# Copy compiled Go app
 COPY --from=builder /app/app /app/app
 
-# Copy Yolo5 folder (if used)
+# Copy Yolo5 folder (if needed)
 COPY --from=builder /app/yolo5 /app/yolo5
 
-# Set lib path
+# Set library path
 ENV LD_LIBRARY_PATH="/opt/gocv/build/lib:/usr/local/lib"
 
+# Set working directory
 WORKDIR /app
+
+# Run the app
 CMD ["./app"]
