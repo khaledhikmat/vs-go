@@ -1,5 +1,5 @@
 # ---------- APP IMAGE: Add Go app on top ----------
-FROM yourname/cpu-opencv-gocv:latest  AS builder
+FROM khaledhikmat/cpu-opencv-gocv:latest  AS builder
 
 # Set working directory
 WORKDIR /app
