@@ -27,6 +27,8 @@ COPY --from=builder /usr/local/lib /opt/gocv/build/lib
 
 # Copy app + any models
 COPY --from=builder /app/app /app/app
+
+# Copy Yolo5 folder (if used)
 COPY --from=builder /app/yolo5 /app/yolo5
 
 # Set lib path

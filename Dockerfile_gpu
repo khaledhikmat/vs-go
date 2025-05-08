@@ -68,6 +68,9 @@ COPY --from=builder /usr/local /usr/local
 
 # Copy app binary
 COPY --from=builder /app/app /app/app
+    
+# Copy Yolo5 folder
+COPY --from=builder /app/yolo5 /app/yolo5
 
 # Set library path
 ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu"

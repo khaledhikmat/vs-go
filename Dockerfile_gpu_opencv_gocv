@@ -1,5 +1,5 @@
-# ---------- BASE IMAGE ----------
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 AS opencv-gocv-base
+# ---------- BASE IMAGE: CUDA + OpenCV + GoCV ----------
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 AS base-gpu
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -9,6 +9,12 @@ RUN apt-get update && apt-get install -y \
     libomp-dev && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Go
+RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
+    rm go1.23.2.linux-amd64.tar.gz
+
 # Clone OpenCV + contrib
 WORKDIR /opt
 RUN git clone https://github.com/opencv/opencv.git && \
@@ -16,31 +22,30 @@ RUN git clone https://github.com/opencv/opencv.git && \
 WORKDIR /opt/opencv
 RUN git checkout 4.8.0 && cd ../opencv_contrib && git checkout 4.8.0
 
-# Build OpenCV with CUDA
+# Configure + build OpenCV with CUDA
 RUN mkdir build && cd build && \
     cmake -D CMAKE_BUILD_TYPE=Release \
-          -D CMAKE_INSTALL_PREFIX=/usr/local \
-          -D OPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib/modules \
-          -D WITH_CUDA=ON \
-          -D WITH_CUDNN=ON \
-          -D OPENCV_DNN_CUDA=ON \
-          -D BUILD_opencv_python3=OFF \
-          -D BUILD_EXAMPLES=OFF \
-          -D BUILD_TESTS=OFF \
-          -D BUILD_PERF_TESTS=OFF \
-          -D ENABLE_FAST_MATH=1 \
-          -D CUDA_FAST_MATH=1 \
-          -D WITH_CUBLAS=1 \
-          -D BUILD_opencv_world=ON \
-          .. > cmake_configure.log 2>&1 || \
+            -D CMAKE_INSTALL_PREFIX=/usr/local \
+            -D OPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib/modules \
+            -D WITH_CUDA=ON \
+            -D WITH_CUDNN=ON \
+            -D OPENCV_DNN_CUDA=ON \
+            -D BUILD_opencv_python3=OFF \
+            -D BUILD_EXAMPLES=OFF \
+            -D BUILD_TESTS=OFF \
+            -D BUILD_PERF_TESTS=OFF \
+            -D ENABLE_FAST_MATH=1 \
+            -D CUDA_FAST_MATH=1 \
+            -D WITH_CUBLAS=1 \
+            -D BUILD_opencv_world=ON \
+            .. > cmake_configure.log 2>&1 || \
     (cat cmake_configure.log && exit 1) && \
     make -j"$(nproc)" && make install && ldconfig
 
-# Build GoCV (C bindings only, no Go build)
+# Build GoCV (requires Go)
 WORKDIR /opt
 RUN git clone https://github.com/hybridgroup/gocv.git && \
     sed -i 's/sudo //g' gocv/Makefile && \
     cd gocv && make install
 
-# DONE: push this image to Docker Hub as:
-# yourdockerhub/opencv-cuda-gocv:4.8.0-cuda11.8
+# Done: this image can now be tagged and reused!
