@@ -74,10 +74,11 @@ start_cpu_it:
 		khaledhikmat/vs-go-cpu:latest /bin/bash
 
 # unfortunately, the docker run command does not support --gpus all on MacOS
+# --gpus all option works on Linux only.
 start_gpu:
 	rm -f ./recordings/*.*
 	rm -f ./settings/*-stats.json
-	docker run --gpus all --platform linux/amd64 --rm \
+	docker run --platform linux/amd64 --rm \
 		--network=host \
 		-v $(PROJECT_DIR)/recordings:/app/recordings \
 		-v $(PROJECT_DIR)/settings:/app/settings \
