@@ -25,13 +25,13 @@ clean:
 dockerize_cpu_base:
 	docker buildx build --platform linux/amd64 -t khaledhikmat/cpu-opencv-gocv:latest -f ./Dockerfile_cpu_opencv_gocv .
 
-dockerize_cpu:
+dockerize_cpu_app:
 	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-cpu:latest -f ./Dockerfile_cpu_opencv_gocv_app .
 
 dockerize_gpu_base:
-	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-gpu:latest -f ./Dockerfile_gpu_opencv_gocv .
+	docker buildx build --platform linux/amd64 -t khaledhikmat/gpu-opencv-gocv:latest -f ./Dockerfile_gpu_opencv_gocv .
 
-dockerize_gpu:
+dockerize_gpu_app:
 	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-gpu:latest -f ./Dockerfile_gpu_opencv_gocv_app .
 
 push-2-hub: 
