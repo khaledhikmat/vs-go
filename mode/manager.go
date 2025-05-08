@@ -171,7 +171,7 @@ func Manager(canxCtx context.Context, svcs pipeline.ServicesFactory, streamers [
 			}
 
 			agentsManagerStats.TotalRunningAgentsUptime = time.Now().Unix() - agentsManagerStartTime
-			agentsManagerStats.TotalRunningAgents += int64(len(runningAgents))
+			agentsManagerStats.TotalRunningAgents = int64(len(runningAgents))
 			if agentsManagerStats.TotalRunningAgentsUptime > 0 {
 				uptimeInMinutes := float64(agentsManagerStats.TotalRunningAgentsUptime) / 60.0
 				agentsManagerStats.AvgRunningAgentsPerMin = float64(agentsManagerStats.TotalRunningAgents) / uptimeInMinutes
