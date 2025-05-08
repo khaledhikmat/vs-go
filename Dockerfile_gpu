@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,7 +21,7 @@ RUN git clone https://github.com/opencv/opencv.git && \
 WORKDIR /opt/opencv
 RUN git checkout 4.8.0 && cd ../opencv_contrib && git checkout 4.8.0
 
-# Configure + build OpenCV
+# Configure + build OpenCV with CUDA
 RUN mkdir build && cd build && \
     cmake -D CMAKE_BUILD_TYPE=Release \
           -D CMAKE_INSTALL_PREFIX=/usr/local \
@@ -52,7 +52,7 @@ COPY . .
 RUN go mod tidy && go build -o app main.go
 
 # ---------- RUNTIME STAGE ----------
-    FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 # Install runtime libs
 RUN apt-get update && apt-get install -y \
