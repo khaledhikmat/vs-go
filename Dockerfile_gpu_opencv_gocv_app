@@ -1,0 +1,38 @@
+# ---------- BUILD STAGE ----------
+FROM khaledhimat/gpu-opencv-gocv:latest AS builder
+
+# Install Go only for build stage
+RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
+    rm go1.23.2.linux-amd64.tar.gz
+
+# Build your Go app
+WORKDIR /app
+COPY . .
+RUN go mod tidy && go build -o app main.go
+
+# ---------- RUNTIME STAGE ----------
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+# Install runtime libraries only
+RUN apt-get update && apt-get install -y \
+    libgtk-3-0 libavcodec58 libavformat58 libswscale5 \
+    libjpeg-turbo8 libpng16-16 libtiff5 libopenexr25 libgdal30 \
+    libomp5 libwebpdemux2 libtbb12 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy OpenCV + GoCV runtime libs
+COPY --from=builder /usr/local /usr/local
+
+# Copy app binary
+COPY --from=builder /app/app /app/app
+
+# Set library path
+ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu"
+
+# Set working directory
+WORKDIR /app
+
+# Run the app
+CMD ["./app"]

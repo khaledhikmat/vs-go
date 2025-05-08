@@ -22,11 +22,17 @@ clean:
 	sudo docker images | grep 'vs-go' | awk '{print $3}' | xargs -r docker rmi -f
 	sudo docker system prune -a
 
+dockerize_cpu_base:
+	docker buildx build --platform linux/amd64 -t khaledhikmat/cpu-opencv-gocv:latest -f ./Dockerfile_cpu_opencv_gocv .
+
 dockerize_cpu:
-	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-cpu:latest -f ./Dockerfile_cpu .
+	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-cpu:latest -f ./Dockerfile_cpu_opencv_gocv_app .
+
+dockerize_gpu_base:
+	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-gpu:latest -f ./Dockerfile_gpu_opencv_gocv .
 
 dockerize_gpu:
-	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-gpu:latest -f ./Dockerfile_gpu .
+	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-gpu:latest -f ./Dockerfile_gpu_opencv_gocv_app .
 
 push-2-hub: 
 	docker login

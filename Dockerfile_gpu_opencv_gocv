@@ -1,4 +1,5 @@
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 AS builder
+# ---------- BASE IMAGE ----------
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 AS opencv-gocv-base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -8,12 +9,6 @@ RUN apt-get update && apt-get install -y \
     libomp-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Go
-RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
-    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
-    rm go1.23.2.linux-amd64.tar.gz
-
 # Clone OpenCV + contrib
 WORKDIR /opt
 RUN git clone https://github.com/opencv/opencv.git && \
@@ -21,7 +16,7 @@ RUN git clone https://github.com/opencv/opencv.git && \
 WORKDIR /opt/opencv
 RUN git checkout 4.8.0 && cd ../opencv_contrib && git checkout 4.8.0
 
-# Configure + build OpenCV with CUDA
+# Build OpenCV with CUDA
 RUN mkdir build && cd build && \
     cmake -D CMAKE_BUILD_TYPE=Release \
           -D CMAKE_INSTALL_PREFIX=/usr/local \
@@ -41,39 +36,11 @@ RUN mkdir build && cd build && \
     (cat cmake_configure.log && exit 1) && \
     make -j"$(nproc)" && make install && ldconfig
 
-# Build GoCV
+# Build GoCV (C bindings only, no Go build)
 WORKDIR /opt
-# Clone GoCV and patch Makefile to remove sudo
 RUN git clone https://github.com/hybridgroup/gocv.git && \
     sed -i 's/sudo //g' gocv/Makefile && \
     cd gocv && make install
 
-# Build your Go app
-WORKDIR /app
-COPY . .
-RUN go mod tidy && go build -o app main.go
-
-# ---------- RUNTIME STAGE ----------
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
-
-# Install runtime libs
-RUN apt-get update && apt-get install -y \
-    libgtk-3-0 libavcodec58 libavformat58 libswscale5 \
-    libjpeg-turbo8 libpng16-16 libtiff5 libopenexr25 libgdal30 \
-    libomp5 libwebpdemux2 libtbb12 && \
-    rm -rf /var/lib/apt/lists/*
-
-# Copy OpenCV + GoCV
-COPY --from=builder /usr/local /usr/local
-
-# Copy app binary
-COPY --from=builder /app/app /app/app
-
-# Set library path
-ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu"
-
-# Set working directory
-WORKDIR /app
-
-# Run the app
-CMD ["./app"]
+# DONE: push this image to Docker Hub as:
+# yourdockerhub/opencv-cuda-gocv:4.8.0-cuda11.8
