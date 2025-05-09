@@ -1,0 +1,25 @@
+# ---------- BASE IMAGE: OpenCV + GoCV ----------
+FROM ubuntu:22.04 AS base-cpu
+
+# Install system + build dependencies
+RUN apt-get update && apt-get install -y \
+    git make cmake unzip wget curl build-essential pkg-config \
+    libgtk-3-dev libavcodec-dev libavformat-dev libswscale-dev \
+    libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libgdal-dev \
+    libomp-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Go
+RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz && \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
+    rm go1.23.2.linux-amd64.tar.gz
+
+# Clone GoCV and patch Makefile (remove sudo)
+WORKDIR /opt
+RUN git clone https://github.com/hybridgroup/gocv.git && \
+    sed -i 's/sudo //g' gocv/Makefile && \
+    cd gocv && make install
+
+# Done: this image can now be tagged and reused!
+    

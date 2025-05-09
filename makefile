@@ -22,8 +22,20 @@ clean:
 	sudo docker images | grep 'vs-go' | awk '{print $3}' | xargs -r docker rmi -f
 	sudo docker system prune -a
 
+dockerize_cpu_base:
+	docker buildx build --platform linux/amd64 -t khaledhikmat/cpu-opencv-gocv:latest -f ./Dockerfile_cpu_opencv_gocv .
+
+dockerize_cpu_app:
+	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-cpu:latest -f ./Dockerfile_cpu_opencv_gocv_app .
+
 dockerize_cpu:
 	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-cpu:latest -f ./Dockerfile_cpu .
+
+dockerize_gpu_base:
+	docker buildx build --platform linux/amd64 -t khaledhikmat/gpu-opencv-gocv:latest -f ./Dockerfile_gpu_opencv_gocv .
+
+dockerize_gpu_app:
+	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-gpu:latest -f ./Dockerfile_gpu_opencv_gocv_app .
 
 dockerize_gpu:
 	docker buildx build --platform linux/amd64 -t khaledhikmat/vs-go-gpu:latest -f ./Dockerfile_gpu .
@@ -62,10 +74,11 @@ start_cpu_it:
 		khaledhikmat/vs-go-cpu:latest /bin/bash
 
 # unfortunately, the docker run command does not support --gpus all on MacOS
+# --gpus all option works on Linux only.
 start_gpu:
 	rm -f ./recordings/*.*
 	rm -f ./settings/*-stats.json
-	docker run --gpus all --platform linux/amd64 --rm \
+	docker run --platform linux/amd64 --rm \
 		--network=host \
 		-v $(PROJECT_DIR)/recordings:/app/recordings \
 		-v $(PROJECT_DIR)/settings:/app/settings \
